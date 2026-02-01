@@ -19,6 +19,7 @@ async function loadJSON(p) {
 
 let chart;
 
+/* ---------- math helpers ---------- */
 function ma(arr, n = 3) {
   return arr.map((_, i) =>
     i < n - 1 ? null :
@@ -26,6 +27,16 @@ function ma(arr, n = 3) {
   );
 }
 
+function slopePct(a, b) {
+  return ((b - a) / a) * 100;
+}
+
+function std(arr) {
+  const m = arr.reduce((a,b)=>a+b,0) / arr.length;
+  return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length);
+}
+
+/* ---------- core render ---------- */
 function render(symbol, daily) {
   const price = daily.map(d => d.close);
   const labels = daily.map(d => d.date);
@@ -44,20 +55,47 @@ function render(symbol, daily) {
         { label: "Price", data: price, borderColor: "#f6c453", pointRadius: 2 },
         { label: "MA3", data: mid, borderColor: "#4fc3f7", borderDash: [5,5] }
       ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: "#ccc" }}},
+      scales: {
+        x: { ticks: { color: "#777" }},
+        y: { ticks: { color: "#777" }}
+      }
     }
   });
 
+  /* ---------- analytics ---------- */
   const last = price.at(-1);
   const prev = price.at(-2);
-  const slope = ((last - prev) / prev) * 100;
 
+  const slope = slopePct(prev, last);          // %/day
+  const vol = std(price.slice(-10));           // short vol
+  const forecast = last * (1 + slope / 100);   // +1D
+
+  // risk score 0–5
+  let risk = Math.min(5,
+    Math.max(0,
+      (Math.abs(slope) * 2) + (vol / last) * 10
+    )
+  );
+
+  let action = "HOLD";
+  if (slope > 0 && risk < 3) action = "BUY";
+
+  /* ---------- state panel ---------- */
   $("stateSymbol").innerText = symbol;
   $("statePrice").innerText = last.toFixed(2);
   $("stateSlope").innerText = slope.toFixed(2) + "% / day";
-  $("stateAction").innerText = slope > 0 ? "BUY" : "HOLD";
+  $("stateForecast").innerText = forecast.toFixed(2);
+  $("stateRisk").innerText = risk.toFixed(2) + " / 5";
+  $("stateAction").innerText = action;
+  $("stateAction").style.color = action === "BUY" ? "#4ade80" : "#facc15";
   $("stateTime").innerText = nowTH();
 }
 
+/* ---------- loader ---------- */
 async function loadSymbol(symbol) {
   try {
     $("status").innerText = "LOADING";
@@ -78,36 +116,7 @@ $("loadBtn").onclick = () => {
 window.onload = () => {
   $("symbolInput").value = "XAUUSD";
   loadSymbol("XAUUSD");
-};        legend: { labels: { color: "#ddd" } }
-      },
-      scales: {
-        x: { ticks: { color: "#aaa" } },
-        y: { ticks: { color: "#aaa" } }
-      }
-    }
-  });
-}
-
-// ---------- state panel ----------
-function renderState(symbol, daily) {
-  const last = daily[daily.length - 1];
-  const prev = daily[daily.length - 2];
-
-  const slope =
-    ((last.close - prev.close) / prev.close) * 100;
-
-  $("stateSymbol").innerText = symbol;
-  $("stateTime").innerText = nowTH();
-  $("statePrice").innerText = last.close.toFixed(2);
-  $("stateSlope").innerText = `${slope.toFixed(2)} %/day`;
-
-  $("stateAction").innerText =
-    slope > 0 ? "BUY" : "HOLD";
-}
-
-// ---------- main ----------
-async function loadSymbol(symbol) {
-  try {
+};  try {
     $("status").innerText = "LOADING…";
 
     const daily = await loadJSON(dataPath(symbol, "daily"));
