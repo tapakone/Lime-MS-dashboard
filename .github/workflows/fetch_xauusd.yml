@@ -3,25 +3,34 @@ name: Fetch XAUUSD Data
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "15 * * * *"   # ทุกชั่วโมง นาทีที่ 15 (กันชนกับ assets)
+
+permissions:
+  contents: write   # ⭐ สำคัญที่สุด แก้ 403
 
 jobs:
-  fetch:
+  fetch-xauusd:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - run: pip install yfinance pandas
+      - name: Install dependencies
+        run: |
+          pip install yfinance pandas
 
-      - run: python fetch_xauusd.py
+      - name: Ensure data folder exists
+        run: |
+          mkdir -p data
 
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions@github.com"
-          git add data/xauusd_*.json
-          git commit -m "Update XAUUSD data" || echo "No change"
-          git push
+      - name: Fetch XAUUSD data
+        run: |
+          python fetch_xauusd.py
+
+      - name: Commit and push XAUUSD
