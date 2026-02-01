@@ -1,58 +1,45 @@
+import yfinance as yf
 import json
 import os
-from datetime import datetime, timezone
-import yfinance as yf
-import pandas as pd
+import time
+from datetime import datetime
 
+SYMBOL = "XAUUSD=X"
+OUTNAME = "xauusd"
 DATA_DIR = "data"
-KEY = "XAUUSD"
-YAHOO = "XAUUSD=X"  # Yahoo Finance symbol for spot gold
+os.makedirs(DATA_DIR, exist_ok=True)
 
-def slugify(sym: str) -> str:
-    s = sym.strip().lower()
-    out = []
-    for ch in s:
-        if ch.isalnum():
-            out.append(ch)
-        else:
-            out.append("-")
-    s = "".join(out)
-    while "--" in s:
-        s = s.replace("--", "-")
-    return s.strip("-")
+try:
+    df = yf.download(
+        SYMBOL,
+        period="2y",
+        interval="1d",
+        progress=False,
+        threads=False
+    )
 
-def to_rows(df: pd.DataFrame):
+    if df.empty:
+        print("Empty daily for XAUUSD")
+        exit(1)
+
     rows = []
     for idx, row in df.iterrows():
-        t = idx
-        if hasattr(t, "to_pydatetime"):
-            t = t.to_pydatetime()
-        rows.append({"time": t.isoformat().replace("+00:00","Z"), "close": float(row["Close"])})
-    return rows
+        rows.append({
+            "time": idx.strftime("%Y-%m-%d"),
+            "close": float(row["Close"])
+        })
 
-def main():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    slug = slugify(KEY)
+    payload = {
+        "symbol": SYMBOL,
+        "rows": rows,
+        "updated": datetime.utcnow().isoformat()
+    }
 
-    daily = yf.download(YAHOO, period="2y", interval="1d", auto_adjust=False, progress=False)
-    if daily is None or daily.empty:
-        raise SystemExit("Empty daily for XAUUSD")
-    daily = daily.dropna(subset=["Close"]).tail(260)
-    daily_rows = [{"time": str(idx.date()), "close": float(v)} for idx, v in daily["Close"].items()]
+    with open(f"{DATA_DIR}/{OUTNAME}_daily.json", "w") as f:
+        json.dump(payload, f)
 
-    m15 = yf.download(YAHOO, period="5d", interval="15m", auto_adjust=False, progress=False)
-    if m15 is None or m15.empty:
-        m15 = yf.download(YAHOO, period="30d", interval="60m", auto_adjust=False, progress=False)
-    m15 = m15.dropna(subset=["Close"]).tail(450)
-    m15_rows = to_rows(m15)
+    print(f"[OK] XAUUSD saved ({len(rows)} rows)")
 
-    ts = datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
-    with open(os.path.join(DATA_DIR, f"{slug}_daily.json"), "w", encoding="utf-8") as f:
-        json.dump({"rows": daily_rows, "updated": ts}, f, ensure_ascii=False)
-    with open(os.path.join(DATA_DIR, f"{slug}_15m.json"), "w", encoding="utf-8") as f:
-        json.dump({"rows": m15_rows, "updated": ts}, f, ensure_ascii=False)
-
-    print("[OK] XAUUSD")
-
-if __name__ == "__main__":
-    main()
+except Exception as e:
+    print("Error:", e)
+    exit(1)
