@@ -1,11 +1,50 @@
-{
-  "assets": [
-    "JEPQ",
-    "NVDA",
-    "TSLA",
-    "BTC-USD",
-    "ETH-USD",
-    "LMT",
-    "XAUUSD"
-  ]
-}
+[
+  {
+    "key": "JEPQ",
+    "name": "JPMorgan Nasdaq Equity Premium Income ETF",
+    "type": "ETF",
+    "yahoo": "JEPQ"
+  },
+  {
+    "key": "AGNC",
+    "name": "AGNC Investment Corp",
+    "type": "Stock",
+    "yahoo": "AGNC"
+  },
+  {
+    "key": "NVDA",
+    "name": "NVIDIA Corp",
+    "type": "Stock",
+    "yahoo": "NVDA"
+  },
+  {
+    "key": "TSLA",
+    "name": "Tesla Inc",
+    "type": "Stock",
+    "yahoo": "TSLA"
+  },
+  {
+    "key": "LMT",
+    "name": "Lockheed Martin",
+    "type": "Stock",
+    "yahoo": "LMT"
+  },
+  {
+    "key": "BTC-USD",
+    "name": "Bitcoin USD",
+    "type": "Crypto",
+    "yahoo": "BTC-USD"
+  },
+  {
+    "key": "ETH-USD",
+    "name": "Ethereum USD",
+    "type": "Crypto",
+    "yahoo": "ETH-USD"
+  },
+  {
+    "key": "XAUUSD",
+    "name": "Gold Spot (XAU/USD)",
+    "type": "FX/Metal",
+    "yahoo": "XAUUSD=X"
+  }
+]

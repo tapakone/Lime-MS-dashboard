@@ -1,80 +1,82 @@
-#!/usr/bin/env python3
-from __future__ import annotations
 import json
+import os
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, Any, List
-import pandas as pd
 import yfinance as yf
+import pandas as pd
 
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
-TICKERS_PATH = ROOT / "tickers.json"
+DATA_DIR = "data"
+
+ASSETS = [
+  {"key":"JEPQ","yahoo":"JEPQ"},
+  {"key":"AGNC","yahoo":"AGNC"},
+  {"key":"NVDA","yahoo":"NVDA"},
+  {"key":"TSLA","yahoo":"TSLA"},
+  {"key":"LMT","yahoo":"LMT"},
+  {"key":"BTC-USD","yahoo":"BTC-USD"},
+  {"key":"ETH-USD","yahoo":"ETH-USD"},
+]
 
 def slugify(sym: str) -> str:
-    import re
     s = sym.strip().lower()
-    s = re.sub(r"\s+", "-", s)
-    s = re.sub(r"[^a-z0-9\-_=\.]", "", s)
-    return s
-
-def to_rows(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    if df is None or df.empty:
-        return out
-    idx = pd.to_datetime(df.index, errors="coerce")
-    closes = df["Close"] if "Close" in df.columns else df.iloc[:, 0]
-    for t, c in zip(idx, closes):
-        if pd.isna(t) or pd.isna(c):
-            continue
-        if t.hour == 0 and t.minute == 0:
-            ts = t.date().isoformat()
+    out = []
+    for ch in s:
+        if ch.isalnum():
+            out.append(ch)
         else:
-            ts = t.to_pydatetime().replace(tzinfo=None).isoformat(timespec="minutes")
-        out.append({"time": ts, "close": float(c)})
-    return out
+            out.append("-")
+    s = "".join(out)
+    while "--" in s:
+        s = s.replace("--", "-")
+    return s.strip("-")
 
-def fetch(symbol: str, yahoo: str):
-    daily = yf.download(yahoo, period="6mo", interval="1d", auto_adjust=False, progress=False)
-    m15 = yf.download(yahoo, period="7d", interval="15m", auto_adjust=False, progress=False)
-    return daily, m15
+def to_rows(df: pd.DataFrame):
+    rows = []
+    for idx, row in df.iterrows():
+        t = idx
+        if hasattr(t, "to_pydatetime"):
+            t = t.to_pydatetime()
+        # Use ISO for intraday; date-only for daily
+        rows.append({"time": t.isoformat().replace("+00:00","Z"), "close": float(row["Close"])})
+    return rows
 
-def main() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    tickers = json.loads(TICKERS_PATH.read_text(encoding="utf-8"))
-    mapping: Dict[str, str] = tickers["tickers"]
+def fetch_one(asset_key: str, yahoo: str):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    slug = slugify(asset_key)
 
-    gen = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    ref = datetime.now().astimezone().strftime("%d %b %Y %H:%M (UTC%z)")
+    # Daily: 2y to ensure >= 40 and stable
+    daily = yf.download(yahoo, period="2y", interval="1d", auto_adjust=False, progress=False)
+    if daily is None or daily.empty:
+        raise RuntimeError(f"Empty daily for {asset_key} ({yahoo})")
+    daily = daily.dropna(subset=["Close"]).tail(220)
+    daily_rows = [{"time": str(idx.date()), "close": float(v)} for idx, v in daily["Close"].items()]
 
-    failures = []
-    for sym, ysym in mapping.items():
+    # 15m: last 5d (yfinance limit), enough points for monitor
+    m15 = yf.download(yahoo, period="5d", interval="15m", auto_adjust=False, progress=False)
+    if m15 is None or m15.empty:
+        # fallback 60m
+        m15 = yf.download(yahoo, period="30d", interval="60m", auto_adjust=False, progress=False)
+    m15 = m15.dropna(subset=["Close"]).tail(400)
+    m15_rows = to_rows(m15)
+
+    ts = datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
+
+    with open(os.path.join(DATA_DIR, f"{slug}_daily.json"), "w", encoding="utf-8") as f:
+        json.dump({"rows": daily_rows, "updated": ts}, f, ensure_ascii=False)
+
+    with open(os.path.join(DATA_DIR, f"{slug}_15m.json"), "w", encoding="utf-8") as f:
+        json.dump({"rows": m15_rows, "updated": ts}, f, ensure_ascii=False)
+
+def main():
+    ok = 0
+    for a in ASSETS:
         try:
-            d1, m15 = fetch(sym, ysym)
-            slug = slugify(sym)
-
-            (DATA_DIR / f"{slug}_daily.json").write_text(
-                json.dumps(
-                    {"symbol": sym, "yahoo": ysym, "source": "Yahoo Finance via yfinance", "generated_utc": gen, "ref_th": ref, "rows": to_rows(d1)},
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
-            )
-            (DATA_DIR / f"{slug}_15m.json").write_text(
-                json.dumps(
-                    {"symbol": sym, "yahoo": ysym, "source": "Yahoo Finance via yfinance", "generated_utc": gen, "ref_th": ref, "rows": to_rows(m15)},
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
-            )
+            fetch_one(a["key"], a["yahoo"])
+            ok += 1
+            print(f"[OK] {a['key']}")
         except Exception as e:
-            failures.append({"symbol": sym, "yahoo": ysym, "error": str(e)})
-
-    if failures:
-        (ROOT / "fetch_failures.json").write_text(json.dumps({"generated_utc": gen, "failures": failures}, ensure_ascii=False, indent=2), encoding="utf-8")
-        print("Some failed:", failures)
-    else:
-        print("OK")
+            print(f"[FAIL] {a['key']}: {e}")
+    if ok == 0:
+        raise SystemExit("All fetches failed")
 
 if __name__ == "__main__":
     main()

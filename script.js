@@ -1,239 +1,331 @@
-const $=(id)=>document.getElementById(id);
+/* LIMES MS — single-page dashboard
+   Data contract (per symbol):
+   - data/<slug>_daily.json: { rows: [{time: "YYYY-MM-DD", close: number}, ...], updated: "ISO" }
+   - data/<slug>_15m.json:  { rows: [{time: "ISO", close: number}, ...], updated: "ISO" }
+*/
+let chart;
 
-const DEFAULT_SYMBOL="JEPQ";
-let chart=null;
+const $ = (id) => document.getElementById(id);
 
 function slugify(sym){
-  return sym.trim().toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-_=\.]/g,"");
+  return sym.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
 }
-function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
-function fmt(x,d=2){
-  if(x===null||x===undefined||Number.isNaN(Number(x))) return "--";
-  return Number(x).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+function toNum(x){
+  const n = Number(x);
+  return Number.isFinite(n) ? n : null;
 }
-function safeLabel(t){
+function fmt2(x){
+  return (x==null) ? "—" : x.toFixed(2);
+}
+function fmtPct(x){
+  return (x==null) ? "—" : (x*100).toFixed(2) + "%";
+}
+function nowTH(){
   try{
-    const dt = (typeof t==="number") ? new Date(t*1000) : new Date(t);
-    if(Number.isNaN(dt.getTime())) return String(t).slice(0,10);
-    return dt.toLocaleDateString("th-TH",{day:"2-digit",month:"2-digit"});
-  }catch{return String(t).slice(0,10);}
+    const d = new Date();
+    return d.toLocaleString("th-TH", { timeZone: "Asia/Bangkok", year:"numeric", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" });
+  }catch{
+    return new Date().toISOString();
+  }
 }
 
-function showModal(msg){
-  $("modalText").textContent=msg;
+function showModal(title, msg){
+  $("modalTitle").textContent = title;
+  $("modalMsg").textContent = msg;
   $("modal").classList.remove("hidden");
 }
-function hideModal(){ $("modal").classList.add("hidden"); }
-
-async function loadJSON(path){
-  const r=await fetch(path,{cache:"no-store"});
-  if(!r.ok) throw new Error(`HTTP ${r.status}`);
-  return await r.json();
+function hideModal(){
+  $("modal").classList.add("hidden");
 }
 
-function sma(arr,p){
-  return arr.map((_,i)=>{
-    const s=arr.slice(Math.max(0,i-p+1),i+1);
-    return s.reduce((a,b)=>a+b,0)/s.length;
+async function loadTickers(){
+  // tickers.json: { tickers: {KEY: yahooSymbol}, aliases: {alias: KEY} }
+  const t = await (await fetch("tickers.json?"+Date.now())).json();
+
+  // build datalist for autofill
+  const dl = $("assetList");
+  dl.innerHTML = "";
+  Object.keys(t.tickers || {}).sort().forEach(key=>{
+    const opt = document.createElement("option");
+    opt.value = key;
+    dl.appendChild(opt);
   });
-}
-function bands(arr,win){
-  return arr.map((_,i)=>{
-    const s=arr.slice(Math.max(0,i-win+1),i+1);
-    const mean=s.reduce((a,b)=>a+b,0)/s.length;
-    const sd=Math.sqrt(s.reduce((a,b)=>a+(b-mean)**2,0)/s.length);
-    return {mean,sd,upper:mean+2*sd,lower:mean-2*sd};
-  });
+
+  return t;
 }
 
-function riskFromSlopeZ(slopeRatioPerDay,z){
-  const slopePct=Math.abs(slopeRatioPerDay*100);
-  const zAbs=Math.abs(z);
-  const zPart=clamp(zAbs*1.2,0,3);
-  const slopePart=clamp(slopePct*0.8,0,2);
-  return clamp(zPart+slopePart,0,5);
-}
-function classify(r){ if(r<=1.6) return "BUY"; if(r<=3.2) return "HOLD"; return "SELL"; }
-function advice(r,slope){
-  if(r<=1.6) return ["BUY", slope>0 ? "Momentum ขาขึ้นและความเสี่ยงต่ำ — ทยอยสะสม/เพิ่มน้ำหนักได้" : "ย่อแต่ยังเสี่ยงต่ำ — ทยอยสะสมแบบแบ่งไม้"];
-  if(r<=3.2) return ["HOLD","สัญญาณผสม — คุมขนาดพอร์ต รอทิศทางชัดขึ้น"];
-  return ["SELL","เสี่ยงสูง/ออกนอกกรอบ — ลดความเสี่ยง รอให้กลับเข้ากรอบก่อน"];
-}
-function flagFromDelta(d){
-  const a=Math.abs(d);
-  if(a<0.25) return ["OK","flag--ok"];
-  if(a<0.70) return ["WATCH","flag--warn"];
-  return ["HOT","flag--bad"];
-}
-function buildMonitor(c15){
-  const last=c15.at(-1);
-  const windows=[["15m",1],["30m",2],["60m",4],["90m",6],["120m",8]];
-  return windows.map(([name,n])=>{
-    const slice=c15.slice(Math.max(0,c15.length-1-n),c15.length-1);
-    const ref=slice.length? slice.reduce((a,b)=>a+b,0)/slice.length : last;
-    const delta=ref? ((last-ref)/ref)*100 : 0;
-    const [flag,cls]=flagFromDelta(delta);
-    return {name,delta,flag,cls};
-  });
-}
-function renderMonitor(rows){
-  const el=$("monitorRows"); el.innerHTML="";
-  for(const r of rows){
-    const div=document.createElement("div");
-    div.className="mrow";
-    div.innerHTML=`<div class="name">${r.name}</div><div></div><div class="delta">${fmt(r.delta,2)}%</div><div class="flag ${r.cls}">${r.flag}</div>`;
-    el.appendChild(div);
+async function loadAssetsForSuggestions(){
+  // assets.json: [{key,name,type,yahoo}, ...]
+  try{
+    const assets = await (await fetch("assets.json?"+Date.now())).json();
+    if(!Array.isArray(assets)) return [];
+    return assets;
+  }catch{
+    return [];
   }
 }
 
-function setBadge(state){
-  const b=$("badge");
-  b.textContent=state;
-  b.classList.remove("badge--buy","badge--hold","badge--sell","badge--wait");
-  if(state==="BUY") b.classList.add("badge--buy");
-  else if(state==="HOLD") b.classList.add("badge--hold");
-  else if(state==="SELL") b.classList.add("badge--sell");
-  else b.classList.add("badge--wait");
+function attachSuggestions(assets){
+  const input = $("symbolInput");
+  const box = $("suggestions");
 
-  const mb=$("miniBadge");
-  mb.textContent=state;
-  mb.style.color=(state==="BUY")?"var(--good)":(state==="HOLD")?"var(--hold)":"var(--bad)";
-  mb.style.background=(state==="BUY")?"rgba(42,214,122,.12)":(state==="HOLD")?"rgba(242,183,75,.12)":"rgba(255,77,90,.12)";
-}
-function setAdviceBadge(txt){
-  const p=$("adviceBadge");
-  p.textContent=txt;
-  p.classList.remove("pill--buy","pill--hold","pill--sell");
-  if(txt==="BUY") p.classList.add("pill--buy");
-  else if(txt==="SELL") p.classList.add("pill--sell");
-  else p.classList.add("pill--hold");
-}
-function setClock(){
-  const now=new Date();
-  $("clock").textContent=now.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short"})+" (UTC+7)";
-  $("miniTime").textContent=now.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"});
-}
-setInterval(setClock,1000);
+  function render(items){
+    if(!items.length){ box.style.display="none"; box.innerHTML=""; return; }
+    box.style.display="block";
+    box.innerHTML = "";
+    items.forEach(a=>{
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = `<div><b>${a.key}</b> <span class="tag">${a.name || ""}</span></div><div class="tag">${a.type || ""}</div>`;
+      div.onclick = ()=>{
+        input.value = a.key;
+        box.style.display="none";
+        $("loadBtn").click();
+      };
+      box.appendChild(div);
+    });
+  }
 
-function buildChart(labels,closes,ma3,upper,lower){
-  const ctx=$("chart");
+  input.addEventListener("input", ()=>{
+    const q = input.value.trim().toLowerCase();
+    if(!q){ render([]); return; }
+    const items = assets
+      .filter(a => (a.key||"").toLowerCase().includes(q) || (a.name||"").toLowerCase().includes(q))
+      .slice(0, 8);
+    render(items);
+  });
+
+  // hide on blur (small delay so click works)
+  input.addEventListener("blur", ()=> setTimeout(()=>{ box.style.display="none"; }, 200));
+  input.addEventListener("focus", ()=>{ if(input.value.trim()) input.dispatchEvent(new Event("input")); });
+}
+
+function computeBands(values, window=40){
+  // rolling mean and std
+  const mid = [];
+  const up = [];
+  const lo = [];
+  for(let i=0;i<values.length;i++){
+    const start = Math.max(0, i-window+1);
+    const slice = values.slice(start, i+1).filter(v=>v!=null);
+    const m = slice.reduce((a,b)=>a+b,0) / slice.length;
+    const v = slice.reduce((a,b)=>a + (b-m)*(b-m), 0) / slice.length;
+    const s = Math.sqrt(v);
+    mid.push(m);
+    up.push(m + 2*s);
+    lo.push(m - 2*s);
+  }
+  return {mid, up, lo};
+}
+
+function ma(values, n=3){
+  const out=[];
+  for(let i=0;i<values.length;i++){
+    const start = Math.max(0, i-n+1);
+    const slice = values.slice(start, i+1).filter(v=>v!=null);
+    out.push(slice.reduce((a,b)=>a+b,0)/slice.length);
+  }
+  return out;
+}
+
+function slopePerDay(values){
+  // simple slope from last 10 points
+  const v = values.filter(x=>x!=null);
+  if(v.length < 12) return null;
+  const n = 10;
+  const y1 = v[v.length-n-1];
+  const y2 = v[v.length-1];
+  return (y2 - y1) / y1 / n; // approx per day
+}
+
+function zScore(value, mid, std){
+  if(std<=0) return 0;
+  return (value-mid)/std;
+}
+
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+
+function setBadge(el, state){
+  el.classList.remove("buy","sell","wait","hold");
+  el.classList.add(state);
+  el.textContent = state.toUpperCase();
+}
+
+function buildChart(labels, price, phase, up, lo, forecastPt){
+  const ctx = $("chart").getContext("2d");
   if(chart) chart.destroy();
-  chart=new Chart(ctx,{
-    type:"line",
-    data:{labels,datasets:[
-      {label:"Price",data:closes,borderColor:getComputedStyle(document.documentElement).getPropertyValue("--price").trim(),pointRadius:1.8,borderWidth:2},
-      {label:"Mid (MA3)",data:ma3,borderColor:getComputedStyle(document.documentElement).getPropertyValue("--mid").trim(),pointRadius:0,borderWidth:2,borderDash:[6,6]},
-      {label:"Upper",data:upper,borderColor:getComputedStyle(document.documentElement).getPropertyValue("--band").trim(),pointRadius:0,borderWidth:1.6},
-      {label:"Lower",data:lower,borderColor:getComputedStyle(document.documentElement).getPropertyValue("--band").trim(),pointRadius:0,borderWidth:1.6},
-    ]},
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{mode:"index",intersect:false}},
-      scales:{
-        x:{grid:{color:"rgba(255,255,255,.06)"},ticks:{color:"rgba(231,237,248,.55)",maxRotation:0}},
-        y:{grid:{color:"rgba(255,255,255,.06)"},ticks:{color:"rgba(231,237,248,.55)"}}}
+
+  const datasets = [
+    { label:"Price", data: price, borderWidth: 2, pointRadius: 2, tension: 0.25 },
+    { label:"Phase / Mid (MA3)", data: phase, borderWidth: 2, borderDash: [0], pointRadius: 0, tension: 0.25 },
+    { label:"Upper / Lower (+2σ)", data: up, borderWidth: 1, pointRadius: 0, tension: 0.25 },
+    { label:"Lower / Upper (-2σ)", data: lo, borderWidth: 1, pointRadius: 0, tension: 0.25 },
+  ];
+
+  if(forecastPt){
+    datasets.push({
+      label:"Today (0)",
+      data: forecastPt.series,
+      borderWidth: 2,
+      borderDash: [6,6],
+      pointRadius: 3,
+      tension: 0
+    });
+  }
+
+  chart = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "rgba(255,255,255,0.70)" } },
+        tooltip: { enabled: true }
+      },
+      scales: {
+        x: { ticks: { color: "rgba(255,255,255,0.55)" }, grid: { color: "rgba(255,255,255,0.06)" } },
+        y: { ticks: { color: "rgba(255,255,255,0.55)" }, grid: { color: "rgba(255,255,255,0.06)" } },
+      }
     }
   });
-  ctx.parentElement.style.height="520px";
 }
 
-function getHuman(){
-  const k="limes_ms_human_risk";
-  const v=localStorage.getItem(k);
-  return clamp(v?Number(v):1.8,0,5);
-}
-function setHuman(v){ localStorage.setItem("limes_ms_human_risk",String(v)); }
+async function loadSymbol(symbolKey, tickers){
+  const key = symbolKey.trim().toUpperCase();
+  if(!key) return;
 
-async function loadSymbol(symbol){
-  const sym=symbol.trim();
-  if(!sym) return;
-  $("assetTitle").textContent=sym.toUpperCase();
-  $("miniSymbol").textContent=sym.toUpperCase();
+  // resolve alias → canonical key
+  const ali = (tickers.aliases || {});
+  const canonical = ali[key] || ali[key.toLowerCase()] || key;
+  const slug = slugify(canonical);
 
-  const slug=slugify(sym);
-  const dailyPath=`data/${slug}_daily.json`;
-  const m15Path=`data/${slug}_15m.json`;
+  $("assetTitle").textContent = canonical;
+  $("floatingSym").textContent = canonical;
 
-  let daily,m15;
-  try{ [daily,m15]=await Promise.all([loadJSON(dailyPath),loadJSON(m15Path)]); }
-  catch{
-    showModal(`หาไฟล์ข้อมูลไม่เจอสำหรับ ${sym}\nต้องมี:\n- ${dailyPath}\n- ${m15Path}`);
-    return;
-  }
-  if(!daily?.rows?.length || !m15?.rows?.length){
-    showModal(`ข้อมูลไม่พอสำหรับ ${sym} (JSON ยังว่าง/สั้นเกินไป)`);
+  const dailyUrl = `data/${slug}_daily.json?` + Date.now();
+  const m15Url  = `data/${slug}_15m.json?` + Date.now();
+
+  let daily, m15;
+  try{
+    daily = await (await fetch(dailyUrl)).json();
+    m15 = await (await fetch(m15Url)).json();
+  }catch(e){
+    showModal("โหลดข้อมูลไม่สำเร็จ", `ไม่พบไฟล์ข้อมูลสำหรับ ${canonical}\n\nตรวจสอบว่าใน repo มี data/${slug}_daily.json และ data/${slug}_15m.json`);
     return;
   }
 
-  const closes=daily.rows.map(r=>Number(r.close)).filter(Number.isFinite);
-  const labels=daily.rows.map(r=>safeLabel(r.time));
-  if(closes.length<20){ showModal(`ข้อมูลไม่พอสำหรับ ${sym} (ต้องมีอย่างน้อย ~20 จุด)`); return; }
+  if(!daily?.rows?.length || !m15?.rows?.length || daily.rows.length < 40){
+    showModal("ข้อมูลไม่พอ", `ข้อมูลไม่พอสำหรับ ${canonical} (JSON ยังว่าง/สั้นเกินไป)\n\nเช็คว่า GitHub Actions สร้างไฟล์ JSON แล้ว และ daily >= 40 จุด`);
+    return;
+  }
 
-  const ma3=sma(closes,3);
-  const bb=bands(closes,40);
-  const upper=bb.map(x=>x.upper);
-  const lower=bb.map(x=>x.lower);
-  buildChart(labels,closes,ma3,upper,lower);
+  // Build series
+  const labels = daily.rows.map(r=>r.time);
+  const price  = daily.rows.map(r=>toNum(r.close));
+  const phase  = ma(price, 3);
 
-  const n=closes.length;
-  const look=Math.min(10,n-1);
-  const p0=closes[n-1-look], p1=closes[n-1];
-  const slope=(p1-p0)/(p0||1e-9)/look;
+  // window stats (last 40)
+  const window = 40;
+  const {mid, up, lo} = computeBands(price, window);
 
-  const mid=ma3[n-1];
-  const sd=(upper[n-1]-mid)/2 || 1e-9;
-  const z=(closes[n-1]-mid)/sd;
+  // forecast: simple (phase slope)
+  const sl = slopePerDay(price);
+  const forecast1d = (price[price.length-1] != null && sl != null) ? price[price.length-1] * (1 + sl) : null;
 
-  const c15=m15.rows.map(r=>Number(r.close)).filter(Number.isFinite);
-  renderMonitor(buildMonitor(c15));
-  const latest15=c15.at(-1);
+  const forecastSeries = price.slice();
+  forecastSeries.push(forecast1d);
+  const labels2 = labels.slice();
+  labels2.push("T+1");
 
-  const human=getHuman();
-  $("humanSlider").value=String(human);
-  $("humanNum").textContent=fmt(human,1);
+  // compute z at last close using last window std
+  const tail = price.slice(-window).filter(v=>v!=null);
+  const m = tail.reduce((a,b)=>a+b,0)/tail.length;
+  const v = tail.reduce((a,b)=>a + (b-m)*(b-m),0)/tail.length;
+  const s = Math.sqrt(v);
+  const z = (price[price.length-1]!=null && s>0) ? (price[price.length-1]-m)/s : 0;
 
-  const base=riskFromSlopeZ(slope,z);
-  const risk=clamp(base*0.7 + human*0.3,0,5);
-  $("riskNum").textContent=fmt(risk,2);
-  $("riskBar").style.width=`${(risk/5)*100}%`;
-  $("miniRisk").textContent=`${fmt(risk,2)}/5`;
+  // decision (simple)
+  let advice="hold";
+  let state="wait";
+  if(z < -0.8) { advice="buy"; state="buy"; }
+  else if(z > 1.2) { advice="sell"; state="sell"; }
+  else { advice="hold"; state="wait"; }
 
-  const state=classify(risk);
-  setBadge(state);
+  // risk score (0..5) based on |z| and band width
+  const band = (up[up.length-1]-lo[lo.length-1]) / (mid[mid.length-1]||1);
+  const risk = Math.min(5, Math.max(0, (Math.abs(z)*1.6 + band*6)));
+  const risk01 = clamp01(risk/5);
 
-  const forecast=closes[n-1]*(1+slope);
-  $("refTime").textContent=daily.ref_th ?? "--";
-  $("latest15").textContent=fmt(latest15,2);
-  $("forecast1d").textContent=fmt(forecast,2);
-  $("slope").textContent=fmt(slope*100,2)+"%/day";
-  $("zscore").textContent=fmt(z,2);
-  $("zPill").textContent="Z="+fmt(z,2);
+  // UI update
+  $("tsText").textContent = `${nowTH()} (UTC+7)`;
+  $("day0").textContent = labels[labels.length-window] || "—";
+  $("latest15").textContent = fmt2(toNum(m15.rows[m15.rows.length-1]?.close));
+  $("forecast1d").textContent = fmt2(forecast1d);
+  $("slope").textContent = (sl==null) ? "—" : ((sl*100).toFixed(2) + "%/day");
+  $("riskScore").textContent = risk.toFixed(2);
+  $("riskFill").style.width = (risk01*100).toFixed(0) + "%";
+  $("zChip").textContent = "z=" + (z==null ? "—" : z.toFixed(2));
 
-  const conf=clamp(100-risk*15,0,100);
-  $("confPill").textContent="Conf="+fmt(conf,0)+"%";
+  setBadge($("stateBadge"), state);
+  setBadge($("floatingBadge"), state);
 
-  const [adv,txt]=advice(risk,slope);
-  setAdviceBadge(adv);
-  $("adviceText").textContent=txt;
-}
+  $("floatingRisk").textContent = risk.toFixed(2) + "/5";
+  $("floatingTime").textContent = nowTH();
 
-function wire(){
-  $("modalClose").addEventListener("click",hideModal);
-  $("modal").addEventListener("click",(e)=>{if(e.target.id==="modal") hideModal();});
-  $("loadBtn").addEventListener("click",()=>loadSymbol($("symbolInput").value||DEFAULT_SYMBOL));
-  $("symbolInput").addEventListener("keydown",(e)=>{if(e.key==="Enter") loadSymbol($("symbolInput").value);});
-  $("humanSlider").addEventListener("input",()=>{
-    const v=clamp(Number($("humanSlider").value),0,5);
-    setHuman(v);
-    $("humanNum").textContent=fmt(v,1);
+  // Advice block
+  setBadge($("adviceBadge"), advice);
+  $("adviceText").textContent =
+    (advice==="buy") ? "Oversold zone. Consider scaling in with controlled size."
+    : (advice==="sell") ? "Overbought zone. Consider taking profit or tightening stops."
+    : "Mixed signals. Maintain position sizing and wait for a clearer trend confirmation.";
+
+  // monitor table (simple delta from last 15m points)
+  const windows = [15,30,60,90,120];
+  const rows=[];
+  const closes15 = m15.rows.map(r=>toNum(r.close)).filter(v=>v!=null);
+  for(const w of windows){
+    if(closes15.length < w+1){ rows.push({w, dp:null, ok:null}); continue; }
+    const a = closes15[closes15.length-1-w];
+    const b = closes15[closes15.length-1];
+    const dp = (b-a)/a;
+    // flag: inside +/-2% for shorter, +/-3% for longer
+    const lim = (w<=30)?0.02:(w<=60)?0.025:0.03;
+    const ok = Math.abs(dp) <= lim;
+    rows.push({w, dp, ok});
+  }
+  const tbody = $("monitorRows");
+  tbody.innerHTML="";
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td>${r.w}m</td><td>${r.dp==null?"—":(r.dp*100).toFixed(2)+"%"}</td><td class="${r.ok===true?'flagOk':r.ok===false?'flagOut':''}">${r.ok==null?"—":(r.ok?"OK":"OUT")}</td>`;
+    tbody.appendChild(tr);
   });
+
+  // draw chart
+  buildChart(labels2, forecastSeries, ma(forecastSeries,3), [...up, null], [...lo, null], {series:[...Array(price.length-1).fill(null), price[price.length-1], forecast1d]});
 }
-async function boot(){
-  wire(); setClock();
-  const h=getHuman();
-  $("humanSlider").value=String(h);
-  $("humanNum").textContent=fmt(h,1);
-  $("symbolInput").value=DEFAULT_SYMBOL;
-  await loadSymbol(DEFAULT_SYMBOL);
+
+async function init(){
+  $("modalOk").onclick = hideModal;
+
+  const tickers = await loadTickers();
+  const assets = await loadAssetsForSuggestions();
+  attachSuggestions(assets);
+
+  const input = $("symbolInput");
+  input.value = "JEPQ";
+
+  $("loadBtn").onclick = ()=>{
+    loadSymbol(input.value, tickers);
+  };
+
+  // Enter key
+  input.addEventListener("keydown", (e)=>{
+    if(e.key==="Enter"){ $("loadBtn").click(); }
+  });
+
+  // initial
+  loadSymbol(input.value, tickers);
 }
-boot();
+init();

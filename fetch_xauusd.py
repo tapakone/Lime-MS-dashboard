@@ -1,38 +1,58 @@
-#!/usr/bin/env python3
-from __future__ import annotations
 import json
+import os
 from datetime import datetime, timezone
-from pathlib import Path
-import pandas as pd
 import yfinance as yf
+import pandas as pd
 
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR = "data"
+KEY = "XAUUSD"
+YAHOO = "XAUUSD=X"  # Yahoo Finance symbol for spot gold
+
+def slugify(sym: str) -> str:
+    s = sym.strip().lower()
+    out = []
+    for ch in s:
+        if ch.isalnum():
+            out.append(ch)
+        else:
+            out.append("-")
+    s = "".join(out)
+    while "--" in s:
+        s = s.replace("--", "-")
+    return s.strip("-")
 
 def to_rows(df: pd.DataFrame):
-    out=[]
-    if df is None or df.empty: return out
-    idx=pd.to_datetime(df.index, errors="coerce")
-    closes=df["Close"] if "Close" in df.columns else df.iloc[:,0]
-    for t,c in zip(idx, closes):
-        if pd.isna(t) or pd.isna(c): continue
-        if t.hour==0 and t.minute==0:
-            ts=t.date().isoformat()
-        else:
-            ts=t.to_pydatetime().replace(tzinfo=None).isoformat(timespec="minutes")
-        out.append({"time":ts,"close":float(c)})
-    return out
+    rows = []
+    for idx, row in df.iterrows():
+        t = idx
+        if hasattr(t, "to_pydatetime"):
+            t = t.to_pydatetime()
+        rows.append({"time": t.isoformat().replace("+00:00","Z"), "close": float(row["Close"])})
+    return rows
 
 def main():
-    gen=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    ref=datetime.now().astimezone().strftime("%d %b %Y %H:%M (UTC%z)")
-    ysym="GC=F"
-    d1=yf.download(ysym, period="6mo", interval="1d", auto_adjust=False, progress=False)
-    m15=yf.download(ysym, period="7d", interval="15m", auto_adjust=False, progress=False)
-    (DATA_DIR/"xauusd_daily.json").write_text(json.dumps({"symbol":"XAUUSD","yahoo":ysym,"source":"Yahoo Finance via yfinance","generated_utc":gen,"ref_th":ref,"rows":to_rows(d1)}, ensure_ascii=False), encoding="utf-8")
-    (DATA_DIR/"xauusd_15m.json").write_text(json.dumps({"symbol":"XAUUSD","yahoo":ysym,"source":"Yahoo Finance via yfinance","generated_utc":gen,"ref_th":ref,"rows":to_rows(m15)}, ensure_ascii=False), encoding="utf-8")
-    print("OK")
+    os.makedirs(DATA_DIR, exist_ok=True)
+    slug = slugify(KEY)
 
-if __name__=="__main__":
+    daily = yf.download(YAHOO, period="2y", interval="1d", auto_adjust=False, progress=False)
+    if daily is None or daily.empty:
+        raise SystemExit("Empty daily for XAUUSD")
+    daily = daily.dropna(subset=["Close"]).tail(260)
+    daily_rows = [{"time": str(idx.date()), "close": float(v)} for idx, v in daily["Close"].items()]
+
+    m15 = yf.download(YAHOO, period="5d", interval="15m", auto_adjust=False, progress=False)
+    if m15 is None or m15.empty:
+        m15 = yf.download(YAHOO, period="30d", interval="60m", auto_adjust=False, progress=False)
+    m15 = m15.dropna(subset=["Close"]).tail(450)
+    m15_rows = to_rows(m15)
+
+    ts = datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
+    with open(os.path.join(DATA_DIR, f"{slug}_daily.json"), "w", encoding="utf-8") as f:
+        json.dump({"rows": daily_rows, "updated": ts}, f, ensure_ascii=False)
+    with open(os.path.join(DATA_DIR, f"{slug}_15m.json"), "w", encoding="utf-8") as f:
+        json.dump({"rows": m15_rows, "updated": ts}, f, ensure_ascii=False)
+
+    print("[OK] XAUUSD")
+
+if __name__ == "__main__":
     main()

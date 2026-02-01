@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="th">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -8,100 +8,89 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <div class="app">
-    <header class="top">
-      <div class="brand">
-        <div class="brand__title">LIMES MS —</div>
-        <div id="assetTitle" class="brand__asset">JEPQ</div>
-        <div class="brand__sub">Daily Close | Forecast vs Actual (+1D)</div>
+  <div class="bg"></div>
+
+  <header class="top">
+    <div class="brand">
+      <div class="brandTitle">LIMES MS —</div>
+      <div id="assetTitle" class="assetTitle">JEPQ</div>
+      <div class="subtitle">Daily Close | Forecast vs Actual (+1D)</div>
+    </div>
+
+    <div class="search">
+      <input id="symbolInput" list="assetList" placeholder="Type symbol e.g. JEPQ, NVDA, XAUUSD" autocomplete="off" />
+      <datalist id="assetList"></datalist>
+
+      <button id="loadBtn">Load</button>
+      <div id="suggestions" class="suggestions"></div>
+    </div>
+
+    <div class="stamp">
+      <div id="tsText" class="tsText">—</div>
+      <div class="meta">Source: Yahoo Finance via yfinance • Data update: GitHub Actions</div>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card chartCard">
+      <canvas id="chart"></canvas>
+    </section>
+
+    <aside class="card sideCard">
+      <h3>STATE</h3>
+      <div class="stateBadgeWrap">
+        <div id="stateBadge" class="stateBadge buy">BUY</div>
       </div>
 
-      <div class="controls">
-        <input id="symbolInput" class="input" placeholder="เช่น JEPQ, NVDA, XAUUSD" autocomplete="off" />
-        <button id="loadBtn" class="btn">Load</button>
-        <div id="clock" class="clock">--</div>
+      <div class="kv">
+        <div class="row"><span>Day 0 ref (04:00 TH)</span><b id="day0">—</b></div>
+        <div class="row"><span>Latest (15m)</span><b id="latest15">—</b></div>
+        <div class="row"><span>Forecast (+1D)</span><b id="forecast1d">—</b></div>
+        <div class="row"><span>Slope</span><b id="slope">—</b></div>
       </div>
-    </header>
 
-    <main class="grid">
-      <section class="card chartCard">
-        <div class="legend">
-          <span class="dot dot--price"></span><span>Price</span>
-          <span class="dot dot--mid"></span><span>Phase / Mid (MA3)</span>
-          <span class="dot dot--band"></span><span>Upper / Lower (±2σ)</span>
-          <span class="dot dot--today"></span><span>Today (0)</span>
-        </div>
-        <canvas id="chart"></canvas>
-        <div class="footnote" id="sourceLine">Source: Yahoo Finance via yfinance • Data update: GitHub Actions</div>
-      </section>
-
-      <section class="card stateCard">
-        <div class="stateHeader">
-          <div class="stateLabel">STATE</div>
-          <div id="badge" class="badge badge--wait">WAIT</div>
-        </div>
-
-        <div class="rows">
-          <div class="row"><div>Day 0 ref (04:00 TH)</div><div id="refTime">--</div></div>
-          <div class="row"><div>Latest (15m)</div><div id="latest15">--</div></div>
-          <div class="row"><div>Forecast (+1D)</div><div id="forecast1d">--</div></div>
-          <div class="row"><div>Slope</div><div id="slope">--</div></div>
-          <div class="row"><div>Z (vs band)</div><div id="zscore">--</div></div>
-        </div>
-
-        <div class="meterWrap">
-          <div class="meterTop">
-            <div>Risk score</div>
-            <div><span id="riskNum">--</span> / 5</div>
-          </div>
-          <div class="meter"><div id="riskBar" class="meter__bar" style="width:0%"></div></div>
-        </div>
-
-        <div class="human">
-          <div class="humanTop">
-            <div>Human Risk Index</div>
-            <div><span id="humanNum">--</span> / 5</div>
-          </div>
-          <input id="humanSlider" type="range" min="0" max="5" step="0.1" value="1.8" />
-          <div class="humanHint">ปรับเองได้ (จำค่าในเครื่อง)</div>
-        </div>
-
-        <div class="advice">
-          <div class="adviceHeader">
-            <div class="stateLabel">ADVICE</div>
-            <div id="adviceBadge" class="pill pill--hold">HOLD</div>
-          </div>
-          <div id="adviceText" class="adviceText">--</div>
-          <div class="adviceFooter">
-            <div id="zPill" class="pill pill--z">Z=--</div>
-            <div id="confPill" class="pill pill--conf">Conf=--%</div>
-          </div>
-        </div>
-
-        <div class="monitor">
-          <div class="monitorHeader">
-            <div class="stateLabel">MONITOR (15m → 120m)</div>
-            <div class="monitorCols"><span>Δ%</span><span>Flag</span></div>
-          </div>
-          <div id="monitorRows" class="monitorRows"></div>
-        </div>
-      </section>
-    </main>
-
-    <div id="mini" class="mini">
-      <div id="miniBadge" class="mini__badge">WAIT</div>
-      <div class="mini__mid">
-        <div id="miniSymbol" class="mini__symbol">--</div>
-        <div class="mini__sub"><span>Risk:</span> <span id="miniRisk">--</span></div>
+      <div class="risk">
+        <div class="riskLabel">Human Risk Index</div>
+        <div class="riskBar"><div id="riskFill" class="riskFill"></div></div>
+        <div class="riskValue"><span id="riskScore">—</span><span class="muted"> / 5</span></div>
       </div>
-      <div id="miniTime" class="mini__time">--</div>
+
+      <div class="advice">
+        <div class="adviceHead">
+          <span>ADVICE</span>
+          <span class="chip" id="zChip">z=—</span>
+        </div>
+        <div id="adviceBadge" class="adviceBadge hold">HOLD</div>
+        <p id="adviceText" class="adviceText">—</p>
+      </div>
+
+      <div class="monitor">
+        <div class="monitorHead">MONITOR (15m → 120m)</div>
+        <table class="mini">
+          <thead><tr><th>Window</th><th>Δ%</th><th>Flag</th></tr></thead>
+          <tbody id="monitorRows"></tbody>
+        </table>
+      </div>
+    </aside>
+  </main>
+
+  <div id="floating" class="floating">
+    <div class="floatingLeft">
+      <div class="floatingTitle">STATE</div>
+      <div id="floatingBadge" class="floatingBadge wait">WAIT</div>
+    </div>
+    <div class="floatingRight">
+      <div id="floatingSym" class="floatingSym">JEPQ</div>
+      <div class="floatingMeta"><span>Risk:</span> <b id="floatingRisk">—</b></div>
+      <div class="floatingMeta"><span id="floatingTime">—</span></div>
     </div>
   </div>
 
   <div id="modal" class="modal hidden">
-    <div class="modal__box">
-      <div id="modalText" class="modal__text"></div>
-      <button id="modalClose" class="btn btn--ghost">ตกลง</button>
+    <div class="modalCard">
+      <div id="modalTitle" class="modalTitle">Error</div>
+      <div id="modalMsg" class="modalMsg">—</div>
+      <button id="modalOk" class="modalOk">ตกลง</button>
     </div>
   </div>
 
