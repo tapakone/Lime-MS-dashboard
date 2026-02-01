@@ -3,15 +3,19 @@ name: Fetch Assets Data
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 * * * *"   # ทุกชั่วโมง (ปรับได้)
+    - cron: "15 */2 * * *"
+  push:
+    paths:
+      - "fetch_assets.py"
+      - "tickers.json"
+      - "requirements.txt"
 
 permissions:
-  contents: write   # ⭐ สำคัญมาก
+  contents: write
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -22,15 +26,19 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install yfinance pandas
+        run: pip install -r requirements.txt
 
-      - name: Fetch assets data
+      - name: Fetch data
         run: python fetch_assets.py
 
-      - name: Commit and push data
+      - name: Commit & push (only if changed)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/*.json
-          git commit -m "Update assets data" || echo "No changes"
+          git add data/*.json fetch_failures.json || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Update assets data [skip ci]"
           git push
