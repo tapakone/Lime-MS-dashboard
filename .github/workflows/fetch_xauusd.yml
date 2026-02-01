@@ -1,1 +1,38 @@
+name: Fetch XAUUSD Data
 
+on:
+  schedule:
+    - cron: "30 * * * *"   # ทุกชั่วโมง นาทีที่ 30
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-xauusd:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Fetch XAUUSD data
+        run: |
+          python fetch_xauusd.py
+
+      - name: Commit and push data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/xauusd_*.json assets.json
+          git commit -m "Update XAUUSD data" || echo "No changes"
+          git push
