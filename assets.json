@@ -1,4 +1,11 @@
 {
-  "version": "fresh-start",
-  "notes": "Filenames use display-symbol slug (frontend/backend match). XAUUSD uses Yahoo alias GC=F."
+  "assets": [
+    "JEPQ",
+    "NVDA",
+    "TSLA",
+    "BTC-USD",
+    "ETH-USD",
+    "LMT",
+    "XAUUSD"
+  ]
 }

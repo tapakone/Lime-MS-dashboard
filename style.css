@@ -1,39 +1,88 @@
-body {
-  margin: 0;
-  background: #0b0f16;
-  color: #ddd;
-  font-family: system-ui, sans-serif;
+:root{
+  --bg0:#05070c; --bg1:#0a0f1b;
+  --card:rgba(15,24,40,.72);
+  --stroke:rgba(255,255,255,.08);
+  --text:#e7edf8; --muted:rgba(231,237,248,.65);
+  --price:#f2b74b; --mid:#69d1ff; --band:#9fb1ff; --today:#ffd36c;
+  --good:#2ad67a; --hold:#f2b74b; --bad:#ff4d5a;
 }
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  color:var(--text);
+  background:
+    radial-gradient(900px 600px at 15% 10%, rgba(255,183,77,.22), transparent 55%),
+    radial-gradient(900px 700px at 85% 20%, rgba(90,200,255,.18), transparent 55%),
+    radial-gradient(800px 600px at 80% 80%, rgba(102,255,159,.12), transparent 55%),
+    linear-gradient(180deg, var(--bg0), var(--bg1));
+}
+.app{max-width:1280px; margin:0 auto; padding:18px 18px 80px}
+.top{display:flex; gap:18px; justify-content:space-between; align-items:flex-start; padding:6px 2px 16px}
+.brand__title{font-weight:800; letter-spacing:.06em; opacity:.55; font-size:44px; line-height:1}
+.brand__asset{font-weight:900; font-size:54px; line-height:1}
+.brand__sub{margin-top:8px; color:var(--muted); font-size:14px}
+.controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding-top:10px}
+.input{width:min(420px,70vw); padding:12px 14px; background:rgba(10,16,30,.55); border:1px solid var(--stroke); border-radius:16px; color:var(--text); outline:none}
+.input:focus{border-color:rgba(105,209,255,.35); box-shadow:0 0 0 3px rgba(105,209,255,.12)}
+.btn{padding:11px 14px; border-radius:14px; border:1px solid var(--stroke); background:rgba(10,16,30,.65); color:var(--text); cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn--ghost{background:rgba(255,255,255,.06)}
+.clock{color:var(--muted); font-size:14px; padding:8px 10px}
 
-header {
-  padding: 16px;
-}
+.grid{display:grid; grid-template-columns:1.2fr .8fr; gap:16px}
+@media (max-width:980px){.grid{grid-template-columns:1fr}.brand__title{font-size:36px}.brand__asset{font-size:46px}}
+.card{background:var(--card); border:1px solid var(--stroke); border-radius:22px; box-shadow:0 20px 45px rgba(0,0,0,.45); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px)}
+.chartCard{padding:14px 14px 8px; min-height:520px}
+.legend{display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--muted); padding:6px 4px 12px}
+.dot{width:10px; height:10px; border-radius:999px; display:inline-block; margin-left:6px}
+.dot--price{background:var(--price)} .dot--mid{background:var(--mid)} .dot--band{background:var(--band)} .dot--today{background:var(--today)}
+.footnote{margin-top:6px; color:rgba(231,237,248,.48); font-size:12px; padding:0 4px 6px}
+.stateCard{padding:16px}
+.stateHeader{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px}
+.stateLabel{font-weight:700; letter-spacing:.06em; font-size:12px; color:rgba(231,237,248,.55)}
+.badge{min-width:110px; text-align:center; padding:10px 12px; border-radius:16px; font-weight:800; letter-spacing:.08em; border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.06)}
+.badge--buy{background:rgba(42,214,122,.12); border-color:rgba(42,214,122,.25); color:var(--good)}
+.badge--hold{background:rgba(242,183,75,.12); border-color:rgba(242,183,75,.25); color:var(--hold)}
+.badge--sell{background:rgba(255,77,90,.12); border-color:rgba(255,77,90,.25); color:var(--bad)}
+.badge--wait{opacity:.75}
+.rows{margin:12px 0 14px}
+.row{display:flex; justify-content:space-between; gap:14px; padding:8px 2px; border-bottom:1px solid rgba(255,255,255,.05); font-size:14px}
+.row>div:first-child{color:var(--muted)} .row>div:last-child{font-weight:700}
+.meterWrap,.human,.advice,.monitor{margin-top:12px; padding:12px; border-radius:18px; border:1px solid rgba(255,255,255,.06); background:rgba(0,0,0,.14)}
+.meterTop,.humanTop{display:flex; justify-content:space-between; color:var(--muted); font-size:13px; margin-bottom:8px}
+.meter{height:10px; border-radius:999px; background:rgba(255,255,255,.08); overflow:hidden}
+.meter__bar{height:100%; border-radius:999px; background:linear-gradient(90deg, var(--good), var(--hold), var(--bad))}
+#humanSlider{width:100%}
+.humanHint{margin-top:6px; color:rgba(231,237,248,.45); font-size:12px}
+.adviceHeader{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px}
+.pill{padding:7px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.06); font-weight:800; font-size:12px}
+.pill--hold{color:var(--hold); border-color:rgba(242,183,75,.18); background:rgba(242,183,75,.10)}
+.pill--buy{color:var(--good); border-color:rgba(42,214,122,.18); background:rgba(42,214,122,.10)}
+.pill--sell{color:var(--bad); border-color:rgba(255,77,90,.18); background:rgba(255,77,90,.10)}
+.pill--z,.pill--conf{color:rgba(231,237,248,.75)}
+.adviceText{color:rgba(231,237,248,.85); font-size:13px; line-height:1.4}
+.adviceFooter{display:flex; gap:8px; justify-content:flex-end; margin-top:10px}
+.monitorHeader{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px}
+.monitorCols{display:flex; gap:38px; color:rgba(231,237,248,.50); font-size:12px}
+.monitorRows{display:flex; flex-direction:column; gap:8px}
+.mrow{display:grid; grid-template-columns:1fr 1fr 70px 70px; gap:10px; align-items:center; font-size:13px}
+.mrow .name{font-weight:700}
+.mrow .delta{justify-self:end; font-variant-numeric:tabular-nums}
+.flag{justify-self:end; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.10); font-weight:800; font-size:12px}
+.flag--ok{background:rgba(42,214,122,.10); border-color:rgba(42,214,122,.18); color:var(--good)}
+.flag--warn{background:rgba(242,183,75,.10); border-color:rgba(242,183,75,.18); color:var(--hold)}
+.flag--bad{background:rgba(255,77,90,.10); border-color:rgba(255,77,90,.18); color:var(--bad)}
 
-.controls {
-  margin-top: 8px;
-}
+.mini{position:fixed; right:16px; bottom:16px; z-index:50; display:flex; gap:10px; align-items:center; padding:10px 12px; border-radius:18px; border:1px solid rgba(255,255,255,.10); background:rgba(6,10,18,.72); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); box-shadow:0 12px 30px rgba(0,0,0,.45); min-width:240px}
+.mini__badge{padding:8px 10px; border-radius:14px; font-weight:900; letter-spacing:.06em; border:1px solid rgba(255,255,255,.12); min-width:78px; text-align:center}
+.mini__mid{flex:1}
+.mini__symbol{font-weight:900}
+.mini__sub{color:rgba(231,237,248,.60); font-size:12px; margin-top:2px}
+.mini__time{color:rgba(231,237,248,.50); font-size:12px}
 
-input, button {
-  padding: 8px;
-  background: #111827;
-  color: #fff;
-  border: 1px solid #333;
-  border-radius: 6px;
-}
-
-main {
-  padding: 16px;
-}
-
-.state {
-  margin-top: 16px;
-  padding: 12px;
-  background: #111827;
-  border-radius: 10px;
-}
-
-.action {
-  margin-top: 8px;
-  font-size: 24px;
-  font-weight: bold;
-}
+.modal{position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:200}
+.hidden{display:none}
+.modal__box{width:min(560px,92vw); background:rgba(10,16,30,.88); border:1px solid rgba(255,255,255,.12); border-radius:22px; padding:18px; box-shadow:0 18px 55px rgba(0,0,0,.55)}
+.modal__text{white-space:pre-wrap; color:rgba(231,237,248,.85); margin-bottom:14px; line-height:1.35}

@@ -1,182 +1,163 @@
-const DATA_DIR = "data";
-const MIN_POINTS = 20;
+const $=(id)=>document.getElementById(id);
 
-const $ = id => document.getElementById(id);
+const DEFAULT_SYMBOL="JEPQ";
+let chart=null;
 
-function nowTH() {
-  return new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
+function slugify(sym){
+  return sym.trim().toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-_=\.]/g,"");
+}
+function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
+function fmt(x,d=2){
+  if(x===null||x===undefined||Number.isNaN(Number(x))) return "--";
+  return Number(x).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+}
+function safeLabel(t){
+  try{
+    const dt = (typeof t==="number") ? new Date(t*1000) : new Date(t);
+    if(Number.isNaN(dt.getTime())) return String(t).slice(0,10);
+    return dt.toLocaleDateString("th-TH",{day:"2-digit",month:"2-digit"});
+  }catch{return String(t).slice(0,10);}
 }
 
-function path(symbol, tf) {
-  return `${DATA_DIR}/${symbol.toLowerCase()}_${tf}.json`;
+function showModal(msg){
+  $("modalText").textContent=msg;
+  $("modal").classList.remove("hidden");
 }
+function hideModal(){ $("modal").classList.add("hidden"); }
 
-async function loadJSON(p) {
-  const r = await fetch(p, { cache: "no-store" });
-  if (!r.ok) throw new Error("not found");
+async function loadJSON(path){
+  const r=await fetch(path,{cache:"no-store"});
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
   return await r.json();
 }
 
-let chart;
-
-/* ---------- math helpers ---------- */
-function ma(arr, n = 3) {
-  return arr.map((_, i) =>
-    i < n - 1 ? null :
-    arr.slice(i - n + 1, i + 1).reduce((a, b) => a + b, 0) / n
-  );
+function sma(arr,p){
+  return arr.map((_,i)=>{
+    const s=arr.slice(Math.max(0,i-p+1),i+1);
+    return s.reduce((a,b)=>a+b,0)/s.length;
+  });
+}
+function bands(arr,win){
+  return arr.map((_,i)=>{
+    const s=arr.slice(Math.max(0,i-win+1),i+1);
+    const mean=s.reduce((a,b)=>a+b,0)/s.length;
+    const sd=Math.sqrt(s.reduce((a,b)=>a+(b-mean)**2,0)/s.length);
+    return {mean,sd,upper:mean+2*sd,lower:mean-2*sd};
+  });
 }
 
-function slopePct(a, b) {
-  return ((b - a) / a) * 100;
+function riskFromSlopeZ(slopeRatioPerDay,z){
+  const slopePct=Math.abs(slopeRatioPerDay*100);
+  const zAbs=Math.abs(z);
+  const zPart=clamp(zAbs*1.2,0,3);
+  const slopePart=clamp(slopePct*0.8,0,2);
+  return clamp(zPart+slopePart,0,5);
+}
+function classify(r){ if(r<=1.6) return "BUY"; if(r<=3.2) return "HOLD"; return "SELL"; }
+function advice(r,slope){
+  if(r<=1.6) return ["BUY", slope>0 ? "Momentum ขาขึ้นและความเสี่ยงต่ำ — ทยอยสะสม/เพิ่มน้ำหนักได้" : "ย่อแต่ยังเสี่ยงต่ำ — ทยอยสะสมแบบแบ่งไม้"];
+  if(r<=3.2) return ["HOLD","สัญญาณผสม — คุมขนาดพอร์ต รอทิศทางชัดขึ้น"];
+  return ["SELL","เสี่ยงสูง/ออกนอกกรอบ — ลดความเสี่ยง รอให้กลับเข้ากรอบก่อน"];
+}
+function flagFromDelta(d){
+  const a=Math.abs(d);
+  if(a<0.25) return ["OK","flag--ok"];
+  if(a<0.70) return ["WATCH","flag--warn"];
+  return ["HOT","flag--bad"];
+}
+function buildMonitor(c15){
+  const last=c15.at(-1);
+  const windows=[["15m",1],["30m",2],["60m",4],["90m",6],["120m",8]];
+  return windows.map(([name,n])=>{
+    const slice=c15.slice(Math.max(0,c15.length-1-n),c15.length-1);
+    const ref=slice.length? slice.reduce((a,b)=>a+b,0)/slice.length : last;
+    const delta=ref? ((last-ref)/ref)*100 : 0;
+    const [flag,cls]=flagFromDelta(delta);
+    return {name,delta,flag,cls};
+  });
+}
+function renderMonitor(rows){
+  const el=$("monitorRows"); el.innerHTML="";
+  for(const r of rows){
+    const div=document.createElement("div");
+    div.className="mrow";
+    div.innerHTML=`<div class="name">${r.name}</div><div></div><div class="delta">${fmt(r.delta,2)}%</div><div class="flag ${r.cls}">${r.flag}</div>`;
+    el.appendChild(div);
+  }
 }
 
-function std(arr) {
-  const m = arr.reduce((a,b)=>a+b,0) / arr.length;
-  return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length);
+function setBadge(state){
+  const b=$("badge");
+  b.textContent=state;
+  b.classList.remove("badge--buy","badge--hold","badge--sell","badge--wait");
+  if(state==="BUY") b.classList.add("badge--buy");
+  else if(state==="HOLD") b.classList.add("badge--hold");
+  else if(state==="SELL") b.classList.add("badge--sell");
+  else b.classList.add("badge--wait");
+
+  const mb=$("miniBadge");
+  mb.textContent=state;
+  mb.style.color=(state==="BUY")?"var(--good)":(state==="HOLD")?"var(--hold)":"var(--bad)";
+  mb.style.background=(state==="BUY")?"rgba(42,214,122,.12)":(state==="HOLD")?"rgba(242,183,75,.12)":"rgba(255,77,90,.12)";
 }
+function setAdviceBadge(txt){
+  const p=$("adviceBadge");
+  p.textContent=txt;
+  p.classList.remove("pill--buy","pill--hold","pill--sell");
+  if(txt==="BUY") p.classList.add("pill--buy");
+  else if(txt==="SELL") p.classList.add("pill--sell");
+  else p.classList.add("pill--hold");
+}
+function setClock(){
+  const now=new Date();
+  $("clock").textContent=now.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short"})+" (UTC+7)";
+  $("miniTime").textContent=now.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"});
+}
+setInterval(setClock,1000);
 
-/* ---------- core render ---------- */
-function render(symbol, daily) {
-  const price = daily.map(d => d.close);
-  const labels = daily.map(d => d.date);
-
-  if (price.length < MIN_POINTS) throw "data too short";
-
-  const mid = ma(price, 3);
-
-  if (chart) chart.destroy();
-
-  chart = new Chart($("priceChart"), {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        { label: "Price", data: price, borderColor: "#f6c453", pointRadius: 2 },
-        { label: "MA3", data: mid, borderColor: "#4fc3f7", borderDash: [5,5] }
-      ]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { labels: { color: "#ccc" }}},
-      scales: {
-        x: { ticks: { color: "#777" }},
-        y: { ticks: { color: "#777" }}
-      }
+function buildChart(labels,closes,ma3,upper,lower){
+  const ctx=$("chart");
+  if(chart) chart.destroy();
+  chart=new Chart(ctx,{
+    type:"line",
+    data:{labels,datasets:[
+      {label:"Price",data:closes,borderColor:getComputedStyle(document.documentElement).getPropertyValue("--price").trim(),pointRadius:1.8,borderWidth:2},
+      {label:"Mid (MA3)",data:ma3,borderColor:getComputedStyle(document.documentElement).getPropertyValue("--mid").trim(),pointRadius:0,borderWidth:2,borderDash:[6,6]},
+      {label:"Upper",data:upper,borderColor:getComputedStyle(document.documentElement).getPropertyValue("--band").trim(),pointRadius:0,borderWidth:1.6},
+      {label:"Lower",data:lower,borderColor:getComputedStyle(document.documentElement).getPropertyValue("--band").trim(),pointRadius:0,borderWidth:1.6},
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{mode:"index",intersect:false}},
+      scales:{
+        x:{grid:{color:"rgba(255,255,255,.06)"},ticks:{color:"rgba(231,237,248,.55)",maxRotation:0}},
+        y:{grid:{color:"rgba(255,255,255,.06)"},ticks:{color:"rgba(231,237,248,.55)"}}}
     }
   });
-
-  /* ---------- analytics ---------- */
-  const last = price.at(-1);
-  const prev = price.at(-2);
-
-  const slope = slopePct(prev, last);          // %/day
-  const vol = std(price.slice(-10));           // short vol
-  const forecast = last * (1 + slope / 100);   // +1D
-
-  // risk score 0–5
-  let risk = Math.min(5,
-    Math.max(0,
-      (Math.abs(slope) * 2) + (vol / last) * 10
-    )
-  );
-
-  let action = "HOLD";
-  if (slope > 0 && risk < 3) action = "BUY";
-
-  /* ---------- state panel ---------- */
-  $("stateSymbol").innerText = symbol;
-  $("statePrice").innerText = last.toFixed(2);
-  $("stateSlope").innerText = slope.toFixed(2) + "% / day";
-  $("stateForecast").innerText = forecast.toFixed(2);
-  $("stateRisk").innerText = risk.toFixed(2) + " / 5";
-  $("stateAction").innerText = action;
-  $("stateAction").style.color = action === "BUY" ? "#4ade80" : "#facc15";
-  $("stateTime").innerText = nowTH();
+  ctx.parentElement.style.height="520px";
 }
 
-/* ---------- loader ---------- */
-async function loadSymbol(symbol) {
-  try {
-    $("status").innerText = "LOADING";
-    const daily = await loadJSON(path(symbol, "daily"));
-    render(symbol, daily);
-    $("status").innerText = "READY";
-  } catch {
-    alert(`ข้อมูลไม่พอสำหรับ ${symbol}`);
-    $("status").innerText = "ERROR";
-  }
+function getHuman(){
+  const k="limes_ms_human_risk";
+  const v=localStorage.getItem(k);
+  return clamp(v?Number(v):1.8,0,5);
 }
-
-$("loadBtn").onclick = () => {
-  const s = $("symbolInput").value.trim().toUpperCase();
-  if (s) loadSymbol(s);
-};
-
-window.onload = () => {
-  $("symbolInput").value = "XAUUSD";
-  loadSymbol("XAUUSD");
-};  try {
-    $("status").innerText = "LOADING…";
-
-    const daily = await loadJSON(dataPath(symbol, "daily"));
-    const intraday = await loadJSON(dataPath(symbol, "15m"));
-
-    if (!daily || daily.length < MIN_POINTS)
-      throw new Error("daily too short");
-
-    renderChart(symbol, daily);
-    renderState(symbol, daily);
-
-    $("status").innerText = "READY";
-  } catch (e) {
-    console.error(e);
-    alert(
-      `ข้อมูลไม่พอสำหรับ ${symbol}\n(JSON ยังว่าง/สั้นเกินไป)`
-    );
-    $("status").innerText = "ERROR";
-  }
-}
-
-// ---------- UI ----------
-$("loadBtn").addEventListener("click", () => {
-  const sym = $("symbolInput").value.trim().toUpperCase();
-  if (sym) loadSymbol(sym);
-});
-
-window.addEventListener("load", () => {
-  $("symbolInput").value = DEFAULT_SYMBOL;
-  loadSymbol(DEFAULT_SYMBOL);
-});    tr.innerHTML = `<td>${r.w}m</td><td>${r.dp==null?"--":fmt(r.dp,2)+"%"}</td><td class="${r.flag==="OK"?"flag-ok":r.flag==="WATCH"?"flag-warn":r.flag==="HIGH"?"flag-bad":""}">${r.flag}</td>`;
-    tb.appendChild(tr);
-  }
-}
-function monitorForcesHighRisk(rows){ return rows.some(r=>r.flag==="HIGH"); }
-
-async function loadJSON(path){
-  const res = await fetch(path, {cache:"no-store"});
-  if(!res.ok) throw new Error(`HTTP ${res.status} ${path}`);
-  return await res.json();
-}
-
-function safeLabel(dateStr){
-  const d=new Date(dateStr);
-  const opt={timeZone:"Asia/Bangkok", day:"2-digit", month:"2-digit"};
-  return new Intl.DateTimeFormat("th-TH", opt).format(d);
-}
+function setHuman(v){ localStorage.setItem("limes_ms_human_risk",String(v)); }
 
 async function loadSymbol(symbol){
   const sym=symbol.trim();
   if(!sym) return;
-  $("assetTitle").textContent = sym.toUpperCase();
+  $("assetTitle").textContent=sym.toUpperCase();
+  $("miniSymbol").textContent=sym.toUpperCase();
+
   const slug=slugify(sym);
   const dailyPath=`data/${slug}_daily.json`;
   const m15Path=`data/${slug}_15m.json`;
 
   let daily,m15;
-  try{ [daily,m15] = await Promise.all([loadJSON(dailyPath), loadJSON(m15Path)]); }
-  catch(e){
-    showModal(`หาไฟล์ข้อมูลไม่เจอสำหรับ ${sym}\nต้องมี:\n- ${dailyPath}\n- ${m15Path}\n\n(หน้าเว็บพร้อมแล้ว แต่ backend ต้องสร้าง JSON ให้ symbol นี้ก่อน)`);
+  try{ [daily,m15]=await Promise.all([loadJSON(dailyPath),loadJSON(m15Path)]); }
+  catch{
+    showModal(`หาไฟล์ข้อมูลไม่เจอสำหรับ ${sym}\nต้องมี:\n- ${dailyPath}\n- ${m15Path}`);
     return;
   }
   if(!daily?.rows?.length || !m15?.rows?.length){
@@ -184,93 +165,75 @@ async function loadSymbol(symbol){
     return;
   }
 
-  const closes=daily.rows.map(r=>Number(r.close));
+  const closes=daily.rows.map(r=>Number(r.close)).filter(Number.isFinite);
   const labels=daily.rows.map(r=>safeLabel(r.time));
+  if(closes.length<20){ showModal(`ข้อมูลไม่พอสำหรับ ${sym} (ต้องมีอย่างน้อย ~20 จุด)`); return; }
 
-  const ma3=closes.map((_,i)=>{
-    const a=closes.slice(Math.max(0,i-2), i+1);
-    return a.reduce((x,y)=>x+y,0)/a.length;
-  });
-
-  const window=40;
-  const upper=closes.map((_,i)=>{
-    const s=closes.slice(Math.max(0,i-window+1), i+1);
-    const mean=s.reduce((x,y)=>x+y,0)/s.length;
-    const sd=Math.sqrt(s.reduce((x,y)=>x+(y-mean)**2,0)/s.length);
-    return mean+2*sd;
-  });
-  const lower=closes.map((_,i)=>{
-    const s=closes.slice(Math.max(0,i-window+1), i+1);
-    const mean=s.reduce((x,y)=>x+y,0)/s.length;
-    const sd=Math.sqrt(s.reduce((x,y)=>x+(y-mean)**2,0)/s.length);
-    return mean-2*sd;
-  });
-
-  buildChart(labels, closes, ma3, upper, lower);
+  const ma3=sma(closes,3);
+  const bb=bands(closes,40);
+  const upper=bb.map(x=>x.upper);
+  const lower=bb.map(x=>x.lower);
+  buildChart(labels,closes,ma3,upper,lower);
 
   const n=closes.length;
-  const look=Math.min(10, n-1);
-  const p0=closes[n-1-look];
-  const p1=closes[n-1];
-  const slopeRatioPerDay=(p1-p0)/p0/look; // ratio/day
+  const look=Math.min(10,n-1);
+  const p0=closes[n-1-look], p1=closes[n-1];
+  const slope=(p1-p0)/(p0||1e-9)/look;
 
-  const midLast=ma3[n-1];
-  const sdApprox=(upper[n-1]-midLast)/2 || 1e-9;
-  const z=(closes[n-1]-midLast)/sdApprox;
+  const mid=ma3[n-1];
+  const sd=(upper[n-1]-mid)/2 || 1e-9;
+  const z=(closes[n-1]-mid)/sd;
 
-  const c15=m15.rows.map(r=>Number(r.close));
+  const c15=m15.rows.map(r=>Number(r.close)).filter(Number.isFinite);
+  renderMonitor(buildMonitor(c15));
   const latest15=c15.at(-1);
-  const rows=buildMonitorRows(c15);
-  renderMonitor(rows);
 
-  let risk=riskFromSlopeZ(slopeRatioPerDay, z);
-  if(monitorForcesHighRisk(rows)) risk=Math.max(risk,4.2);
+  const human=getHuman();
+  $("humanSlider").value=String(human);
+  $("humanNum").textContent=fmt(human,1);
 
-  const state=classifyState(risk);
+  const base=riskFromSlopeZ(slope,z);
+  const risk=clamp(base*0.7 + human*0.3,0,5);
+  $("riskNum").textContent=fmt(risk,2);
+  $("riskBar").style.width=`${(risk/5)*100}%`;
+  $("miniRisk").textContent=`${fmt(risk,2)}/5`;
+
+  const state=classify(risk);
   setBadge(state);
-  setRiskUI(risk);
 
-  const forecast = closes[n-1]*(1+slopeRatioPerDay);
+  const forecast=closes[n-1]*(1+slope);
+  $("refTime").textContent=daily.ref_th ?? "--";
+  $("latest15").textContent=fmt(latest15,2);
+  $("forecast1d").textContent=fmt(forecast,2);
+  $("slope").textContent=fmt(slope*100,2)+"%/day";
+  $("zscore").textContent=fmt(z,2);
+  $("zPill").textContent="Z="+fmt(z,2);
 
-  $("refTime").textContent = daily.ref_th ?? "--";
-  $("latest15").textContent = fmt(latest15,2);
-  $("forecast1d").textContent = fmt(forecast,2);
-  $("slope").textContent = fmt(slopeRatioPerDay*100,2)+"%/day";
-  $("zscore").textContent = fmt(z,2);
-  $("zPill").textContent = "Z="+fmt(z,2);
+  const conf=clamp(100-risk*15,0,100);
+  $("confPill").textContent="Conf="+fmt(conf,0)+"%";
 
-  const [adv, txt] = adviceFromZSlope(z, slopeRatioPerDay);
+  const [adv,txt]=advice(risk,slope);
   setAdviceBadge(adv);
-  $("adviceText").textContent = txt;
+  $("adviceText").textContent=txt;
 }
 
-let tickerIndex=[];
-async function initTickers(){
-  try{ const t=await loadJSON("tickers.json"); tickerIndex=(t?.tickers??[]).map(x=>({sym:x.symbol,name:x.name||""})); }
-  catch(_){ }
+function wire(){
+  $("modalClose").addEventListener("click",hideModal);
+  $("modal").addEventListener("click",(e)=>{if(e.target.id==="modal") hideModal();});
+  $("loadBtn").addEventListener("click",()=>loadSymbol($("symbolInput").value||DEFAULT_SYMBOL));
+  $("symbolInput").addEventListener("keydown",(e)=>{if(e.key==="Enter") loadSymbol($("symbolInput").value);});
+  $("humanSlider").addEventListener("input",()=>{
+    const v=clamp(Number($("humanSlider").value),0,5);
+    setHuman(v);
+    $("humanNum").textContent=fmt(v,1);
+  });
 }
-initTickers();
-
-function renderSuggestions(q){
-  const box=$("suggestions");
-  if(!q){ box.classList.add("hidden"); box.innerHTML=""; return; }
-  const qq=q.toLowerCase().trim();
-  const hits=tickerIndex.filter(x=>x.sym.toLowerCase().includes(qq)||x.name.toLowerCase().includes(qq)).slice(0,8);
-  if(!hits.length){ box.classList.add("hidden"); box.innerHTML=""; return; }
-  box.innerHTML="";
-  for(const h of hits){
-    const div=document.createElement("div");
-    div.className="item";
-    div.innerHTML=`<span class="sym">${h.sym}</span><span class="name">${h.name}</span>`;
-    div.addEventListener("click",()=>{ $("symbolInput").value=h.sym; box.classList.add("hidden"); loadSymbol(h.sym); });
-    box.appendChild(div);
-  }
-  box.classList.remove("hidden");
+async function boot(){
+  wire(); setClock();
+  const h=getHuman();
+  $("humanSlider").value=String(h);
+  $("humanNum").textContent=fmt(h,1);
+  $("symbolInput").value=DEFAULT_SYMBOL;
+  await loadSymbol(DEFAULT_SYMBOL);
 }
-
-$("symbolInput").addEventListener("input", e=>renderSuggestions(e.target.value));
-$("symbolInput").addEventListener("keydown", e=>{ if(e.key==="Enter"){ $("suggestions").classList.add("hidden"); loadSymbol($("symbolInput").value); } });
-document.addEventListener("click", e=>{ if(!e.target.closest(".searchBox")) $("suggestions").classList.add("hidden"); });
-$("loadBtn").addEventListener("click", ()=>loadSymbol($("symbolInput").value));
-
-loadSymbol("XAUUSD");
+boot();
