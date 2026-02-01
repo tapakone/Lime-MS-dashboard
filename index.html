@@ -1,81 +1,33 @@
-<!doctype html>
-<html lang="th">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LIMES MS — Dashboard</title>
-  <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<meta charset="UTF-8" />
+<title>LIMES MS — Dashboard</title>
+<link rel="stylesheet" href="style.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="title">LIMES MS — <span id="assetTitle">XAUUSD</span></div>
-        <div class="subtitle">Daily Close | Forecast vs Actual (+1D)</div>
-      </div>
-      <div class="controls">
-        <div class="searchBox">
-          <input id="symbolInput" type="text" value="XAUUSD" placeholder="Type symbol เช่น XAUUSD, JEPQ, BTC-USD" autocomplete="off" />
-          <div id="suggestions" class="suggestions hidden"></div>
-        </div>
-        <button id="loadBtn" class="btn">Load</button>
-        <div class="time" id="thaiTime">--</div>
-      </div>
-    </header>
-
-    <main class="grid">
-      <section class="card chartCard">
-        <div class="legend">
-          <span><i class="dot dot-price"></i>Price</span>
-          <span><i class="dot dot-mid"></i>Phase / Mid (MA3)</span>
-          <span><i class="dot dot-band"></i>Upper / Lower (±2σ)</span>
-          <span><i class="dot dot-today"></i>Today (0)</span>
-        </div>
-        <div class="canvasWrap"><canvas id="priceChart"></canvas></div>
-      </section>
-
-      <aside class="card sideCard">
-        <div class="sideHeader">STATE</div>
-        <div id="stateBadge" class="badge buy">BUY</div>
-
-        <div class="kv">
-          <div class="k">Day 0 ref (04:00 TH)</div><div class="v" id="refTime">--</div>
-          <div class="k">Latest (15m)</div><div class="v" id="latest15">--</div>
-          <div class="k">Forecast (+1D)</div><div class="v" id="forecast1d">--</div>
-          <div class="k">Slope</div><div class="v" id="slope">--</div>
-          <div class="k">Z (vs band)</div><div class="v" id="zscore">--</div>
-          <div class="k">Risk score</div><div class="v" id="riskScoreText">--</div>
-        </div>
-
-        <div class="riskBar"><div id="riskFill" class="riskFill" style="width:0%"></div></div>
-
-        <div class="sideHeader mt">ADVICE</div>
-        <div class="adviceRow">
-          <div id="adviceBadge" class="advice hold">HOLD</div>
-          <div class="pill" id="zPill">Z=--</div>
-        </div>
-        <div class="adviceText" id="adviceText">--</div>
-
-        <div class="sideHeader mt">MONITOR (15m → 120m)</div>
-        <table class="miniTable">
-          <thead><tr><th>Window</th><th>Δ%</th><th>Flag</th></tr></thead>
-          <tbody id="monitorBody"></tbody>
-        </table>
-
-        <div class="footnote">Source: Yahoo Finance via yfinance • Data update: GitHub Actions</div>
-      </aside>
-    </main>
-
-    <div id="modal" class="modal hidden">
-      <div class="modalCard">
-        <div class="modalTitle" id="modalTitle">tapakone.github.io บอกว่า</div>
-        <div class="modalMsg" id="modalMsg">--</div>
-        <div class="modalBtns"><button id="modalOk" class="btn">ตกลง</button></div>
-      </div>
-    </div>
+<header>
+  <h1>LIMES MS — <span id="stateSymbol"></span></h1>
+  <div class="controls">
+    <input id="symbolInput" placeholder="XAUUSD / NVDA / JEPQ" />
+    <button id="loadBtn">Load</button>
   </div>
+  <div id="stateTime"></div>
+</header>
 
-  <script src="script.js"></script>
+<main>
+  <canvas id="priceChart"></canvas>
+
+  <section class="state">
+    <div>Status: <span id="status">IDLE</span></div>
+    <div>Price: <span id="statePrice">--</span></div>
+    <div>Slope: <span id="stateSlope">--</span></div>
+    <div class="action" id="stateAction">--</div>
+  </section>
+</main>
+
+<script src="script.js"></script>
 </body>
 </html>
