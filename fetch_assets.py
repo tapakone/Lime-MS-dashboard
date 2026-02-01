@@ -1,82 +1,70 @@
-import json
-import os
-from datetime import datetime, timezone
 import yfinance as yf
-import pandas as pd
-
-DATA_DIR = "data"
+import json
+import time
+import os
+from datetime import datetime
 
 ASSETS = [
-  {"key":"JEPQ","yahoo":"JEPQ"},
-  {"key":"AGNC","yahoo":"AGNC"},
-  {"key":"NVDA","yahoo":"NVDA"},
-  {"key":"TSLA","yahoo":"TSLA"},
-  {"key":"LMT","yahoo":"LMT"},
-  {"key":"BTC-USD","yahoo":"BTC-USD"},
-  {"key":"ETH-USD","yahoo":"ETH-USD"},
+    ("JEPQ", "jepq"),
+    ("AGNC", "agnc"),
+    ("NVDA", "nvda"),
+    ("TSLA", "tsla"),
+    ("VOO", "voo"),
+    ("QQQl", "qqql"), 
+    ("LMT", "lmt"),
+    ("BTC-USD", "btc-usd"),
+    ("ETH-USD", "eth-usd"),
 ]
 
-def slugify(sym: str) -> str:
-    s = sym.strip().lower()
-    out = []
-    for ch in s:
-        if ch.isalnum():
-            out.append(ch)
-        else:
-            out.append("-")
-    s = "".join(out)
-    while "--" in s:
-        s = s.replace("--", "-")
-    return s.strip("-")
+DATA_DIR = "data"
+os.makedirs(DATA_DIR, exist_ok=True)
 
-def to_rows(df: pd.DataFrame):
-    rows = []
-    for idx, row in df.iterrows():
-        t = idx
-        if hasattr(t, "to_pydatetime"):
-            t = t.to_pydatetime()
-        # Use ISO for intraday; date-only for daily
-        rows.append({"time": t.isoformat().replace("+00:00","Z"), "close": float(row["Close"])})
-    return rows
+def fetch_daily(symbol, outname):
+    try:
+        print(f"Fetching {symbol} ...")
+        df = yf.download(
+            symbol,
+            period="2y",
+            interval="1d",
+            progress=False,
+            threads=False
+        )
 
-def fetch_one(asset_key: str, yahoo: str):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    slug = slugify(asset_key)
+        if df.empty:
+            print(f"[WARN] Empty daily for {symbol}")
+            return False
 
-    # Daily: 2y to ensure >= 40 and stable
-    daily = yf.download(yahoo, period="2y", interval="1d", auto_adjust=False, progress=False)
-    if daily is None or daily.empty:
-        raise RuntimeError(f"Empty daily for {asset_key} ({yahoo})")
-    daily = daily.dropna(subset=["Close"]).tail(220)
-    daily_rows = [{"time": str(idx.date()), "close": float(v)} for idx, v in daily["Close"].items()]
+        rows = []
+        for idx, row in df.iterrows():
+            rows.append({
+                "time": idx.strftime("%Y-%m-%d"),
+                "close": float(row["Close"])
+            })
 
-    # 15m: last 5d (yfinance limit), enough points for monitor
-    m15 = yf.download(yahoo, period="5d", interval="15m", auto_adjust=False, progress=False)
-    if m15 is None or m15.empty:
-        # fallback 60m
-        m15 = yf.download(yahoo, period="30d", interval="60m", auto_adjust=False, progress=False)
-    m15 = m15.dropna(subset=["Close"]).tail(400)
-    m15_rows = to_rows(m15)
+        payload = {
+            "symbol": symbol,
+            "rows": rows,
+            "updated": datetime.utcnow().isoformat()
+        }
 
-    ts = datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
+        with open(f"{DATA_DIR}/{outname}_daily.json", "w") as f:
+            json.dump(payload, f)
 
-    with open(os.path.join(DATA_DIR, f"{slug}_daily.json"), "w", encoding="utf-8") as f:
-        json.dump({"rows": daily_rows, "updated": ts}, f, ensure_ascii=False)
+        print(f"[OK] {symbol} saved ({len(rows)} rows)")
+        return True
 
-    with open(os.path.join(DATA_DIR, f"{slug}_15m.json"), "w", encoding="utf-8") as f:
-        json.dump({"rows": m15_rows, "updated": ts}, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[ERROR] {symbol}: {e}")
+        return False
 
-def main():
-    ok = 0
-    for a in ASSETS:
-        try:
-            fetch_one(a["key"], a["yahoo"])
-            ok += 1
-            print(f"[OK] {a['key']}")
-        except Exception as e:
-            print(f"[FAIL] {a['key']}: {e}")
-    if ok == 0:
-        raise SystemExit("All fetches failed")
 
-if __name__ == "__main__":
-    main()
+any_success = False
+
+for sym, out in ASSETS:
+    ok = fetch_daily(sym, out)
+    any_success = any_success or ok
+    time.sleep(20)  # <<< สำคัญมาก กัน rate limit
+
+if not any_success:
+    print("All fetches failed")
+    exit(1)
