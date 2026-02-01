@@ -1,39 +1,27 @@
-
 name: Fetch Assets Data
 
 on:
-  schedule:
-    - cron: "15 * * * *"   # ทุกชั่วโมง นาทีที่ 15
   workflow_dispatch:
-
-permissions:
-  contents: write
+  schedule:
+    - cron: "*/30 * * * *"
 
 jobs:
-  fetch-assets:
+  fetch:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+      - run: pip install yfinance pandas
 
-      - name: Fetch assets data
-        run: |
-          python fetch_assets.py
+      - run: python fetch_assets.py
 
-      - name: Commit and push data
-        run: |
+      - run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/*.json assets.json
-          git commit -m "Update assets data" || echo "No changes"
+          git config user.email "github-actions@github.com"
+          git add data/*.json
+          git commit -m "Update assets data" || echo "No change"
           git push
