@@ -1,73 +1,38 @@
-/* ===============================
-   LIMES MS — script.js (FULL)
-   ใช้กับ GitHub Pages
-   =============================== */
-
-const DEFAULT_SYMBOL = "XAUUSD";
 const DATA_DIR = "data";
 const MIN_POINTS = 20;
 
-// ---------- helpers ----------
-function $(id) {
-  return document.getElementById(id);
-}
+const $ = id => document.getElementById(id);
 
 function nowTH() {
   return new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
 }
 
-function dataPath(symbol, tf) {
-  // สำคัญมาก: underscore _
+function path(symbol, tf) {
   return `${DATA_DIR}/${symbol.toLowerCase()}_${tf}.json`;
 }
 
-// ---------- fetch ----------
-async function loadJSON(url) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`404: ${url}`);
-  return await res.json();
+async function loadJSON(p) {
+  const r = await fetch(p, { cache: "no-store" });
+  if (!r.ok) throw new Error("not found");
+  return await r.json();
 }
 
-// ---------- indicators ----------
-function ma(arr, n = 3) {
-  return arr.map((_, i) => {
-    if (i < n - 1) return null;
-    const slice = arr.slice(i - n + 1, i + 1);
-    return slice.reduce((a, b) => a + b, 0) / n;
-  });
-}
-
-function std(arr, n = 20) {
-  return arr.map((_, i) => {
-    if (i < n - 1) return null;
-    const slice = arr.slice(i - n + 1, i + 1);
-    const mean = slice.reduce((a, b) => a + b, 0) / n;
-    const v =
-      slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
-    return Math.sqrt(v);
-  });
-}
-
-// ---------- chart ----------
 let chart;
 
-function renderChart(symbol, daily) {
-  const labels = daily.map(d => d.date);
-  const price = daily.map(d => d.close);
+function ma(arr, n = 3) {
+  return arr.map((_, i) =>
+    i < n - 1 ? null :
+    arr.slice(i - n + 1, i + 1).reduce((a, b) => a + b, 0) / n
+  );
+}
 
-  if (price.length < MIN_POINTS) {
-    alert(`ข้อมูลไม่พอสำหรับ ${symbol}`);
-    return;
-  }
+function render(symbol, daily) {
+  const price = daily.map(d => d.close);
+  const labels = daily.map(d => d.date);
+
+  if (price.length < MIN_POINTS) throw "data too short";
 
   const mid = ma(price, 3);
-  const sigma = std(price, 20);
-  const upper = mid.map((v, i) =>
-    v && sigma[i] ? v + 2 * sigma[i] : null
-  );
-  const lower = mid.map((v, i) =>
-    v && sigma[i] ? v - 2 * sigma[i] : null
-  );
 
   if (chart) chart.destroy();
 
@@ -76,38 +41,44 @@ function renderChart(symbol, daily) {
     data: {
       labels,
       datasets: [
-        {
-          label: "Price",
-          data: price,
-          borderColor: "#f6c453",
-          tension: 0.25,
-          pointRadius: 2
-        },
-        {
-          label: "Mid (MA3)",
-          data: mid,
-          borderColor: "#4fc3f7",
-          borderDash: [5, 5],
-          pointRadius: 0
-        },
-        {
-          label: "Upper (+2σ)",
-          data: upper,
-          borderColor: "#90caf9",
-          pointRadius: 0
-        },
-        {
-          label: "Lower (-2σ)",
-          data: lower,
-          borderColor: "#90caf9",
-          pointRadius: 0
-        }
+        { label: "Price", data: price, borderColor: "#f6c453", pointRadius: 2 },
+        { label: "MA3", data: mid, borderColor: "#4fc3f7", borderDash: [5,5] }
       ]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { labels: { color: "#ddd" } }
+    }
+  });
+
+  const last = price.at(-1);
+  const prev = price.at(-2);
+  const slope = ((last - prev) / prev) * 100;
+
+  $("stateSymbol").innerText = symbol;
+  $("statePrice").innerText = last.toFixed(2);
+  $("stateSlope").innerText = slope.toFixed(2) + "% / day";
+  $("stateAction").innerText = slope > 0 ? "BUY" : "HOLD";
+  $("stateTime").innerText = nowTH();
+}
+
+async function loadSymbol(symbol) {
+  try {
+    $("status").innerText = "LOADING";
+    const daily = await loadJSON(path(symbol, "daily"));
+    render(symbol, daily);
+    $("status").innerText = "READY";
+  } catch {
+    alert(`ข้อมูลไม่พอสำหรับ ${symbol}`);
+    $("status").innerText = "ERROR";
+  }
+}
+
+$("loadBtn").onclick = () => {
+  const s = $("symbolInput").value.trim().toUpperCase();
+  if (s) loadSymbol(s);
+};
+
+window.onload = () => {
+  $("symbolInput").value = "XAUUSD";
+  loadSymbol("XAUUSD");
+};        legend: { labels: { color: "#ddd" } }
       },
       scales: {
         x: { ticks: { color: "#aaa" } },
