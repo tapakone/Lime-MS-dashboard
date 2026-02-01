@@ -7,7 +7,7 @@
   "tickers": [
     {
       "symbol": "XAUUSD",
-      "name": "Gold (display) → Yahoo: GC=F"
+      "name": "Gold (proxy)"
     },
     {
       "symbol": "JEPQ",
