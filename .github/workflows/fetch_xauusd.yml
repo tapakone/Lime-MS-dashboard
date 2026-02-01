@@ -1,42 +1,27 @@
 name: Fetch XAUUSD Data
 
 on:
-  schedule:
-    - cron: "0 */6 * * *"   # ทุก 6 ชั่วโมง
   workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
 
 jobs:
-  fetch-xauusd:
+  fetch:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - run: pip install yfinance pandas
 
-      - name: Fetch XAUUSD data
-        run: |
-          python fetch_xauusd.py
+      - run: python fetch_xauusd.py
 
-      - name: Commit and push data (safe)
-        run: |
+      - run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # add ทุกไฟล์ json ที่มี (ถ้าไม่มีจะไม่พัง)
-          git add data/*.json assets.json || true
-
-          # commit เฉพาะเมื่อมีการเปลี่ยนแปลง
-          git commit -m "Update XAUUSD data" || echo "No changes to commit"
-
-          # push แบบไม่ให้ workflow ล้ม
-          git push || echo "Nothing to push"
+          git config user.email "github-actions@github.com"
+          git add data/xauusd_*.json
+          git commit -m "Update XAUUSD data" || echo "No change"
+          git push
