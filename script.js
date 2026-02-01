@@ -1,113 +1,173 @@
-const $ = (id) => document.getElementById(id);
+/* ===============================
+   LIMES MS — script.js (FULL)
+   ใช้กับ GitHub Pages
+   =============================== */
 
-function slugify(sym){
-  return sym.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
-}
-function fmt(n,d=2){
-  if(n===null || n===undefined || Number.isNaN(n)) return '--';
-  return Number(n).toFixed(d);
-}
-function clamp(x,a,b){return Math.max(a, Math.min(b,x));}
+const DEFAULT_SYMBOL = "XAUUSD";
+const DATA_DIR = "data";
+const MIN_POINTS = 20;
 
-function showModal(msg, title="tapakone.github.io บอกว่า"){
-  $("modalTitle").textContent = title;
-  $("modalMsg").textContent = msg;
-  $("modal").classList.remove("hidden");
+// ---------- helpers ----------
+function $(id) {
+  return document.getElementById(id);
 }
-$("modalOk").addEventListener("click", ()=> $("modal").classList.add("hidden"));
 
-function thaiNowString(){
-  const dt = new Date();
-  const opt = { timeZone: "Asia/Bangkok", year:"numeric", month:"short", day:"2-digit", hour:"2-digit", minute:"2-digit" };
-  const parts = new Intl.DateTimeFormat("th-TH", opt).formatToParts(dt);
-  const get = (t) => parts.find(p=>p.type===t)?.value ?? "";
-  return `${get("day")} ${get("month")} ${get("year")} ${get("hour")}:${get("minute")} (UTC+7)`;
+function nowTH() {
+  return new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
 }
-function setThaiTime(){ $("thaiTime").textContent = thaiNowString(); }
-setThaiTime(); setInterval(setThaiTime, 15000);
 
+function dataPath(symbol, tf) {
+  // สำคัญมาก: underscore _
+  return `${DATA_DIR}/${symbol.toLowerCase()}_${tf}.json`;
+}
+
+// ---------- fetch ----------
+async function loadJSON(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`404: ${url}`);
+  return await res.json();
+}
+
+// ---------- indicators ----------
+function ma(arr, n = 3) {
+  return arr.map((_, i) => {
+    if (i < n - 1) return null;
+    const slice = arr.slice(i - n + 1, i + 1);
+    return slice.reduce((a, b) => a + b, 0) / n;
+  });
+}
+
+function std(arr, n = 20) {
+  return arr.map((_, i) => {
+    if (i < n - 1) return null;
+    const slice = arr.slice(i - n + 1, i + 1);
+    const mean = slice.reduce((a, b) => a + b, 0) / n;
+    const v =
+      slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+    return Math.sqrt(v);
+  });
+}
+
+// ---------- chart ----------
 let chart;
-function buildChart(labels, price, mid, upper, lower){
-  const ctx = $("priceChart").getContext("2d");
-  if(chart) chart.destroy();
-  chart = new Chart(ctx, {
-    type:"line",
-    data:{
+
+function renderChart(symbol, daily) {
+  const labels = daily.map(d => d.date);
+  const price = daily.map(d => d.close);
+
+  if (price.length < MIN_POINTS) {
+    alert(`ข้อมูลไม่พอสำหรับ ${symbol}`);
+    return;
+  }
+
+  const mid = ma(price, 3);
+  const sigma = std(price, 20);
+  const upper = mid.map((v, i) =>
+    v && sigma[i] ? v + 2 * sigma[i] : null
+  );
+  const lower = mid.map((v, i) =>
+    v && sigma[i] ? v - 2 * sigma[i] : null
+  );
+
+  if (chart) chart.destroy();
+
+  chart = new Chart($("priceChart"), {
+    type: "line",
+    data: {
       labels,
-      datasets:[
-        {label:"Price", data:price, borderWidth:2, pointRadius:2, tension:0.25},
-        {label:"Mid (MA3)", data:mid, borderDash:[4,4], borderWidth:2, pointRadius:0, tension:0.25},
-        {label:"Upper", data:upper, borderWidth:2, pointRadius:0, tension:0.25},
-        {label:"Lower", data:lower, borderWidth:2, pointRadius:0, tension:0.25},
+      datasets: [
+        {
+          label: "Price",
+          data: price,
+          borderColor: "#f6c453",
+          tension: 0.25,
+          pointRadius: 2
+        },
+        {
+          label: "Mid (MA3)",
+          data: mid,
+          borderColor: "#4fc3f7",
+          borderDash: [5, 5],
+          pointRadius: 0
+        },
+        {
+          label: "Upper (+2σ)",
+          data: upper,
+          borderColor: "#90caf9",
+          pointRadius: 0
+        },
+        {
+          label: "Lower (-2σ)",
+          data: lower,
+          borderColor: "#90caf9",
+          pointRadius: 0
+        }
       ]
     },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      plugins:{legend:{display:false}, tooltip:{mode:"index", intersect:false}},
-      interaction:{mode:"index", intersect:false},
-      scales:{
-        x:{grid:{color:"rgba(255,255,255,.06)"}, ticks:{color:"rgba(215,226,239,.75)", maxRotation:0, autoSkip:true, maxTicksLimit:10}},
-        y:{grid:{color:"rgba(255,255,255,.06)"}, ticks:{color:"rgba(215,226,239,.75)"}}
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: "#ddd" } }
+      },
+      scales: {
+        x: { ticks: { color: "#aaa" } },
+        y: { ticks: { color: "#aaa" } }
       }
     }
   });
-  const css = getComputedStyle(document.documentElement);
-  const ds = chart.data.datasets;
-  ds[0].borderColor = css.getPropertyValue("--gold").trim(); ds[0].pointBackgroundColor = ds[0].borderColor;
-  ds[1].borderColor = css.getPropertyValue("--mid").trim();
-  ds[2].borderColor = css.getPropertyValue("--band").trim();
-  ds[3].borderColor = css.getPropertyValue("--band").trim();
-  chart.update();
 }
 
-function riskFromSlopeZ(slopeRatioPerDay, z){
-  const a = Math.abs(slopeRatioPerDay);
-  let slopeScore = a<=0.0005?0.5 : a<=0.0015?1.5 : a<=0.003?3.0 : 4.5; // 0.05%/d,0.15%/d,0.3%/d
-  const az = Math.abs(z);
-  let zScore = az<=0.5?0.5 : az<=1.0?1.5 : az<=1.8?3.0 : 4.5;
-  return clamp((slopeScore+zScore)/2, 0, 5);
-}
-function classifyState(r){ return r>=4.0?"HIGH RISK": (r>=2.0?"WATCH":"BUY"); }
-function setBadge(state){
-  const el=$("stateBadge");
-  el.textContent=state;
-  el.classList.remove("buy","watch","high");
-  if(state==="BUY") el.classList.add("buy");
-  else if(state==="WATCH") el.classList.add("watch");
-  else el.classList.add("high");
-}
-function setRiskUI(r){ $("riskScoreText").textContent = `${fmt(r,2)}/5`; $("riskFill").style.width=`${clamp(r/5*100,0,100)}%`; }
-function setAdviceBadge(a){
-  const el=$("adviceBadge");
-  el.textContent=a;
-  el.classList.remove("buy","hold","sell");
-  if(a==="BUY") el.classList.add("buy"); else if(a==="SELL") el.classList.add("sell"); else el.classList.add("hold");
-}
-function adviceFromZSlope(z, slopeRatioPerDay){
-  if(z<=-0.25 && slopeRatioPerDay>-0.003) return ["BUY","ต่ำกว่ากลางช่วงพอสมควร เหมาะทยอยสะสมแบบคุมขนาด"];
-  if(z>=0.85 || slopeRatioPerDay>=0.003) return ["SELL","เริ่มตึง/เร่งขึ้นแรง แนะนำลดความเสี่ยงหรือแบ่งขายบางส่วน"];
-  return ["HOLD","สัญญาณยังผสมกัน รอดูให้ชัดก่อนค่อยเพิ่มน้ำหนัก"];
+// ---------- state panel ----------
+function renderState(symbol, daily) {
+  const last = daily[daily.length - 1];
+  const prev = daily[daily.length - 2];
+
+  const slope =
+    ((last.close - prev.close) / prev.close) * 100;
+
+  $("stateSymbol").innerText = symbol;
+  $("stateTime").innerText = nowTH();
+  $("statePrice").innerText = last.close.toFixed(2);
+  $("stateSlope").innerText = `${slope.toFixed(2)} %/day`;
+
+  $("stateAction").innerText =
+    slope > 0 ? "BUY" : "HOLD";
 }
 
-function pctChange(a,b){ if(a===0||a==null||b==null) return null; return (b-a)/a*100; }
-function buildMonitorRows(series15){
-  const windows=[15,30,60,90,120];
-  const last=series15.at(-1);
-  return windows.map(w=>{
-    const idx=series15.length-1-Math.round(w/15);
-    if(idx<0) return {w, dp:null, flag:"--"};
-    const dp=pctChange(series15[idx], last);
-    const a=Math.abs(dp??0);
-    const flag = a>=1.0?"HIGH": (a>=0.5?"WATCH":"OK");
-    return {w, dp, flag};
-  });
+// ---------- main ----------
+async function loadSymbol(symbol) {
+  try {
+    $("status").innerText = "LOADING…";
+
+    const daily = await loadJSON(dataPath(symbol, "daily"));
+    const intraday = await loadJSON(dataPath(symbol, "15m"));
+
+    if (!daily || daily.length < MIN_POINTS)
+      throw new Error("daily too short");
+
+    renderChart(symbol, daily);
+    renderState(symbol, daily);
+
+    $("status").innerText = "READY";
+  } catch (e) {
+    console.error(e);
+    alert(
+      `ข้อมูลไม่พอสำหรับ ${symbol}\n(JSON ยังว่าง/สั้นเกินไป)`
+    );
+    $("status").innerText = "ERROR";
+  }
 }
-function renderMonitor(rows){
-  const tb=$("monitorBody"); tb.innerHTML="";
-  for(const r of rows){
-    const tr=document.createElement("tr");
-    tr.innerHTML = `<td>${r.w}m</td><td>${r.dp==null?"--":fmt(r.dp,2)+"%"}</td><td class="${r.flag==="OK"?"flag-ok":r.flag==="WATCH"?"flag-warn":r.flag==="HIGH"?"flag-bad":""}">${r.flag}</td>`;
+
+// ---------- UI ----------
+$("loadBtn").addEventListener("click", () => {
+  const sym = $("symbolInput").value.trim().toUpperCase();
+  if (sym) loadSymbol(sym);
+});
+
+window.addEventListener("load", () => {
+  $("symbolInput").value = DEFAULT_SYMBOL;
+  loadSymbol(DEFAULT_SYMBOL);
+});    tr.innerHTML = `<td>${r.w}m</td><td>${r.dp==null?"--":fmt(r.dp,2)+"%"}</td><td class="${r.flag==="OK"?"flag-ok":r.flag==="WATCH"?"flag-warn":r.flag==="HIGH"?"flag-bad":""}">${r.flag}</td>`;
     tb.appendChild(tr);
   }
 }
