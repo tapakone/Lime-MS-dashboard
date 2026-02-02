@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LIMES MS — Gold (XAUUSD)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">🍋</div>
+        <div>
+          <div class="title">LIMES MS</div>
+          <div class="subtitle">Gold Spot Monitor — XAUUSD</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="control">
+          <label for="assetInput">Asset</label>
+          <input id="assetInput" list="assetList" placeholder="Type: XAUUSD, NVDA, SCHD..." autocomplete="off" />
+          <datalist id="assetList"></datalist>
+        </div>
+        <button id="btnReload" class="btn">Reload</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="card chartCard">
+        <div class="cardHeader">
+          <div class="h1" id="assetTitle">XAUUSD</div>
+          <div class="meta">
+            <span class="pill" id="modePill">D + 2hr + 1hr</span>
+            <span class="pill" id="timeThai">TH: --:--</span>
+          </div>
+        </div>
+
+        <div class="chartWrap">
+          <canvas id="chart" width="1280" height="520"></canvas>
+        </div>
+
+        <div class="cardFooter">
+          <div class="row">
+            <div class="kv"><div class="k">Last price</div><div class="v" id="lastPrice">—</div></div>
+            <div class="kv"><div class="k">Source</div><div class="v" id="src">—</div></div>
+            <div class="kv"><div class="k">Stale</div><div class="v" id="stale">—</div></div>
+            <div class="kv"><div class="k">Updated (UTC)</div><div class="v" id="updated">—</div></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="card statusCard">
+        <div class="cardHeader"><div class="h2">STATE</div></div>
+
+        <div class="statusBlock">
+          <div class="statusRow"><div class="label">D</div><div class="score" id="scoreD">—</div><div class="bar" id="barD"></div></div>
+          <div class="statusRow"><div class="label">2hr</div><div class="score" id="score2">—</div><div class="bar" id="bar2"></div></div>
+          <div class="statusRow"><div class="label">1hr</div><div class="score" id="score1">—</div><div class="bar" id="bar1"></div></div>
+        </div>
+
+        <div class="adviceWrap">
+          <div class="adviceTitle">Advice</div>
+          <div class="advicePill" id="advicePill">—</div>
+        </div>
+
+        <div class="alertBox" id="alertBox">
+          <div class="alertTitle">HIGH RISK</div>
+          <div class="alertText">Risk ≥ 4.5 will blink red</div>
+        </div>
+
+        <div class="note">
+          D = last close reference (for gold: 04:00 TH).<br/>
+          Gold updates every 15 minutes via fallback API chain.
+        </div>
+      </aside>
+    </main>
+
+    <footer class="footer"><span>© LIMES / Mark-S — private build</span></footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
