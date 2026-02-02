@@ -1,1 +1,7 @@
-
+{
+  "symbol": "XAUUSD",
+  "price": null,
+  "source": "init",
+  "stale": true,
+  "fetched_utc": "2026-02-02T03:52:18.684474Z"
+}
