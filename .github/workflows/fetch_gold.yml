@@ -1,8 +1,8 @@
-name: fetch-assets
+name: fetch-gold
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # every 30 minutes (script will skip outside TH window)
+    - cron: "*/5 * * * *"   # every 5 minutes (GitHub Actions minimum)
   workflow_dispatch:
 
 permissions:
@@ -27,9 +27,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Fetch assets data
+      - name: Fetch gold data
         run: |
-          python fetch_assets.py
+          python fetch_gold.py
 
       - name: Commit and push data (only if changed)
         run: |
@@ -40,5 +40,5 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-          git commit -m "Update assets data"
+          git commit -m "Update gold data"
           git push
