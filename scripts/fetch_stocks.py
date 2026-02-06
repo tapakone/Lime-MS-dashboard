@@ -1,0 +1,1 @@
+print('stocks fetch placeholder')

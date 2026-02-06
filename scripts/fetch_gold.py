@@ -1,0 +1,1 @@
+print('gold fetch placeholder')
