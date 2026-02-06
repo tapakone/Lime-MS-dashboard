@@ -1,8 +1,8 @@
-name: fetch-gold
+name: fetch-stocks
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/15 * * * *"
 permissions:
   contents: write
 
@@ -16,8 +16,8 @@ jobs:
           python-version: "3.11"
       - name: Install deps
         run: pip install -r requirements.txt
-      - name: Fetch gold
-        run: python fetch_gold.py
+      - name: Fetch stocks
+        run: python fetch_stocks.py
       - name: Commit & push data
         run: |
           git config user.name "github-actions[bot]"
@@ -27,5 +27,5 @@ jobs:
             echo "No changes"
             exit 0
           fi
-          git commit -m "Update gold data"
+          git commit -m "Update stocks data"
           git push
