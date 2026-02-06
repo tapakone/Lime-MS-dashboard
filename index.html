@@ -1,124 +1,74 @@
 <!doctype html>
-<html lang="th">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LIMES MS — Dashboard</title>
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="script.js"></script>
 </head>
 <body>
   <div class="bg"></div>
-
   <header class="topbar">
     <div class="brand">
-      <div class="logo-wrap">
-        <img id="assetLogo" class="logo" alt="logo" src="assets/lemon.svg"/>
-      </div>
+      <img class="logo" src="assets/lemon.svg" alt="LIMES" />
       <div class="brand-text">
         <div class="brand-title">LIMES MS</div>
-        <div class="brand-sub" id="brandSub">Gold Spot Monitor — XAUUSD</div>
+        <div class="brand-sub">Gold Spot Monitor — <span id="assetBadge">XAUUSD</span></div>
       </div>
     </div>
 
-    <div class="controls card">
-      <div class="control-row">
-        <label for="assetInput" class="label">Asset</label>
-        <div class="input-wrap">
-          <input id="assetInput" list="assetList" class="input" placeholder="Type: XAUUSD, NVDA, SCHD..." autocomplete="off" />
-          <datalist id="assetList"></datalist>
-        </div>
-        <button id="reloadBtn" class="btn">Reload</button>
+    <div class="controls">
+      <div class="control">
+        <div class="label">Asset</div>
+        <input id="assetInput" list="assetList" placeholder="Type: XAUUSD, NVDA, JEPQ..." autocomplete="off"/>
+        <datalist id="assetList"></datalist>
       </div>
-      <div class="meta" id="metaLine">—</div>
+      <button id="reloadBtn" class="btn">Reload</button>
     </div>
   </header>
 
   <main class="grid">
     <section class="card chart-card">
-      <div class="chart-head">
+      <div class="card-head">
         <div>
           <div class="h1" id="assetTitle">XAUUSD</div>
-          <div class="h2" id="assetSubtitle">Daily Close | Forecast vs Actual (+1D)</div>
+          <div class="h2">Daily Close | Forecast vs Actual (+1D)</div>
         </div>
-        <div class="pills">
-          <span class="pill" id="pillWindows">D + 2hr + 1hr</span>
-          <span class="pill" id="pillClock">--:-- (TH)</span>
-        <span class="pill" id="pillRefresh">Refresh 5m</span>
+        <div class="pill-row">
+          <div class="pill" id="tfPill">D + 2hr + 1hr</div>
+          <div class="pill" id="timePill">--:-- (TH)</div>
+          <div class="pill" id="refreshPill">Refresh 5m</div>
         </div>
       </div>
-
-      <div class="legend">
-        <span class="dot dot-price"></span><span>Price</span>
-        <span class="dot dot-mid"></span><span>Phase / Mid (MA3)</span>
-        <span class="dot dot-band"></span><span>Upper / Lower (±2σ)</span>
-        <span class="dot dot-today"></span><span>Today (0)</span>
-      </div>
-
-      <div class="canvas-wrap">
+      <div class="legend-note" id="sourceLine">Source: — · Data update: —</div>
+      <div class="chart-wrap">
         <canvas id="chart"></canvas>
       </div>
-
-      <div class="chart-foot" id="sourceLine">Source: — · Data update: —</div>
+      <div class="toast" id="toast" hidden></div>
     </section>
 
-    <aside class="card state-card">
-      <div class="state-head">
-        <div class="state-title">STATE</div>
-        <div class="badge" id="stateBadge">—</div>
-      </div>
-
+    <aside class="card side-card">
+      <div class="side-title">STATE</div>
       <div class="kv">
-        <div class="k">Day 0 ref (04:00 TH)</div><div class="v" id="refDay0">—</div>
-        <div class="k">Latest (15m/30m)</div><div class="v" id="latest">—</div>
-        <div class="k">Forecast (+1D)</div><div class="v" id="forecast">—</div>
+        <div class="k">Day 0 ref (04:00 TH)</div><div class="v" id="day0">—</div>
+        <div class="k">Latest</div><div class="v" id="latest">—</div>
+        <div class="k">Forecast (+1D)</div><div class="v" id="fc1d">—</div>
         <div class="k">Slope</div><div class="v" id="slope">—</div>
-        <div class="k">Risk score</div><div class="v" id="riskScore">—</div>
-      </div>
-
-      <div class="riskbar">
-        <div class="riskbar-fill" id="riskFill"></div>
+        <div class="k">Risk score</div><div class="v" id="risk">—</div>
       </div>
 
       <div class="advice">
-        <div class="advice-head">
-          <div class="advice-title">ADVICE</div>
-          <div class="zbox" id="zBox">z=—</div>
+        <div class="advice-title">ADVICE</div>
+        <div class="advice-row">
+          <div class="badge" id="adviceBadge">—</div>
+          <div class="mini" id="zBadge">z=—</div>
         </div>
-        <div class="advice-main" id="adviceMain">—</div>
-        <div class="advice-sub" id="adviceSub">—</div>
-      </div>
-
-      <div class="monitor">
-        <div class="monitor-title">MONITOR (1h → 2h → D)</div>
-        <div class="monitor-grid" id="monitorGrid"></div>
+        <div class="riskbar"><div id="riskFill" class="riskfill"></div></div>
+        <div class="footnote">Signals: D/2hr/1hr (chart) · 5m (refresh)</div>
       </div>
     </aside>
   </main>
-
-  <!-- Floating mini summary (follows scroll) -->
-  <div class="float-card" id="floatCard" role="button" tabindex="0" aria-label="Open summary">
-    <div class="float-left">
-      <div class="float-badge" id="floatBadge">—</div>
-    </div>
-    <div class="float-mid">
-      <div class="float-asset" id="floatAsset">—</div>
-      <div class="float-risk" id="floatRisk">Risk: —</div>
-    </div>
-    <div class="float-time" id="floatTime">--:--</div>
-  </div>
-
-  <!-- Modal -->
-  <div class="modal" id="modal" aria-hidden="true">
-    <div class="modal-card">
-      <div class="modal-title" id="modalTitle">สรุป</div>
-      <div class="modal-body" id="modalBody">—</div>
-      <button class="btn" id="modalClose">ตกลง</button>
-    </div>
-  </div>
-
-  <script src="script.js"></script>
 </body>
 </html>
