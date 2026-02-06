@@ -1,9 +1,0 @@
-{
-  "symbol": "XAUUSD",
-  "price": null,
-  "source": null,
-  "stale": false,
-  "provider_ts": null,
-  "fetched_utc": "2026-02-06T05:07:54.012680+00:00",
-  "error": "metalsdev: METALSDEV_KEY not set"
-}
