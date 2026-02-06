@@ -1,0 +1,68 @@
+{
+  "XAUUSD": {
+    "display": "Gold Spot",
+    "kind": "gold",
+    "yahoo": "XAUUSD=X",
+    "logo": "assets/lemon.svg"
+  },
+  "NVDA": {
+    "display": "NVIDIA",
+    "kind": "equity",
+    "yahoo": "NVDA",
+    "logo": "https://logo.clearbit.com/nvidia.com"
+  },
+  "JEPQ": {
+    "display": "JPM Nasdaq Equity Premium Income ETF",
+    "kind": "etf",
+    "yahoo": "JEPQ",
+    "logo": "https://logo.clearbit.com/jpmorgan.com"
+  },
+  "AGNC": {
+    "display": "AGNC Investment Corp",
+    "kind": "equity",
+    "yahoo": "AGNC",
+    "logo": "https://logo.clearbit.com/agnc.com"
+  },
+  "JNJ": {
+    "display": "Johnson & Johnson",
+    "kind": "equity",
+    "yahoo": "JNJ",
+    "logo": "https://logo.clearbit.com/jnj.com"
+  },
+  "LMT": {
+    "display": "Lockheed Martin",
+    "kind": "equity",
+    "yahoo": "LMT",
+    "logo": "https://logo.clearbit.com/lockheedmartin.com"
+  },
+  "TSLA": {
+    "display": "Tesla",
+    "kind": "equity",
+    "yahoo": "TSLA",
+    "logo": "https://logo.clearbit.com/tesla.com"
+  },
+  "BTC-USD": {
+    "display": "Bitcoin",
+    "kind": "crypto",
+    "yahoo": "BTC-USD",
+    "logo": "https://cryptologos.cc/logos/bitcoin-btc-logo.png"
+  },
+  "ETH-USD": {
+    "display": "Ethereum",
+    "kind": "crypto",
+    "yahoo": "ETH-USD",
+    "logo": "https://cryptologos.cc/logos/ethereum-eth-logo.png"
+  },
+  "VOO": {
+    "display": "Vanguard S&P 500 ETF",
+    "kind": "etf",
+    "yahoo": "VOO",
+    "logo": "https://logo.clearbit.com/vanguard.com"
+  },
+  "QQQI": {
+    "display": "(Placeholder) QQQI",
+    "kind": "etf",
+    "yahoo": "QQQI",
+    "logo": "assets/lemon.svg"
+  }
+}
